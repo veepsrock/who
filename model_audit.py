@@ -64,8 +64,8 @@ def classify_themes(df):
     for index, row in df.iterrows():
         text_sequence = row['textTranslated.en']
         result = classifier(text_sequence, theme_labels, multi_label = True)
-        result['predictedThemes'] = result['labels']
-        result['themeScores'] = result['scores']
+        result['predictedThemes'] = [label for label, score in zip(result['labels'], result['scores']) if score > 0.8]
+        result['themeScores'] = [score for score in result['scores'] if score > 0.8]
         result_list.append(result)
     result_df = pd.DataFrame(result_list)[['sequence', 'predictedThemes', 'themeScores']]
     return result_df
@@ -77,7 +77,7 @@ themes_df = classify_themes(df)
 
 # COMMAND ----------
 
-themes_df.head()
+themes_df['id'] = df['id']
 
 # COMMAND ----------
 
@@ -116,20 +116,102 @@ themes_df
 # COMMAND ----------
 
 # Apply the replacement function to the "themes" column
-themes_df['themes'] = themes_df['predictedThemes'].apply(replace_themes)
+themes_df['modelThemes'] = themes_df['predictedThemes'].apply(replace_themes)
 
 
 # COMMAND ----------
 
-themes_df
+audit = pd.merge(df, themes_df, how = "left", on = "id")
 
 # COMMAND ----------
 
-themes_df['id'] = df['id']
+audit.columns
 
 # COMMAND ----------
 
-themes_df.head()
+audit_df = audit[["id", "textTranslated.en",  'themeIdsReviewed', "modelThemes",  "themeScores"]]
+
+# COMMAND ----------
+
+audit_df["themeIdsReviewed"] = audit_df['themeIdsReviewed'].str.split(',')
+
+# COMMAND ----------
+
+# Function to calculate false positives
+def calculate_false_positives(row):
+    reviewed_themes = set(row['themeIdsReviewed']) if isinstance(row['themeIdsReviewed'], list) else set()
+    model_themes = set(row['modelThemes']) if isinstance(row['modelThemes'], list) else set()
+    false_positives = list(model_themes - reviewed_themes)
+    return false_positives
+
+# COMMAND ----------
+
+audit_df['falsePositives'] = audit_df.apply(calculate_false_positives, axis=1)
+
+
+# COMMAND ----------
+
+audit_df.head()
+
+# COMMAND ----------
+
+# Function to calculate falseScores
+def calculate_false_scores(row):
+    model_themes = row['modelThemes']
+    false_positives = row['falsePositives']
+    scores = row['themeScores']
+
+    false_scores = []
+
+    for false_theme in false_positives:
+        if false_theme in model_themes:
+            index = model_themes.index(false_theme)
+            false_scores.append(scores[index])
+        else:
+            false_scores.append(np.nan)  # Handle cases where the theme is not found
+
+    return false_scores
+
+# COMMAND ----------
+
+audit_df['falseScores'] = audit_df.apply(calculate_false_scores, axis=1)
+
+
+# COMMAND ----------
+
+positives = audit_df["falsePositives"].explode().value_counts().to_frame().T
+
+# COMMAND ----------
+
+# Create a list to store all "falsePositives" and corresponding "falseScores"
+false_data = []
+
+for _, row in audit_df.iterrows():
+    false_positives = row['falsePositives']
+    false_scores = row['falseScores']
+
+    for i, false_theme in enumerate(false_positives):
+        false_data.append((false_theme, false_scores[i]))
+
+# COMMAND ----------
+
+# Create a summary DataFrame from the collected data
+summary_df = pd.DataFrame(false_data, columns=['falsePositives', 'falseScores'])
+
+# Calculate the total count and average falseScores for each unique "falsePositives"
+summary_table = summary_df.groupby('falsePositives').agg({'falseScores': ['count', 'mean']}).reset_index()
+
+# Rename the columns for clarity
+summary_table.columns = ['falsePositives', 'Count', 'Average falseScores']
+
+
+# COMMAND ----------
+
+summary_table.sort_values(by='Average falseScores', ascending=False)
+
+# COMMAND ----------
+
+audit_df.to_csv("amp_audit_viv.csv", index=False)
 
 # COMMAND ----------
 
