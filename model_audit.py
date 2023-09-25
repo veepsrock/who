@@ -1,5 +1,7 @@
 # Databricks notebook source
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 pd.set_option('display.max_columns', None)
 
 # COMMAND ----------
@@ -13,10 +15,6 @@ df = pd.read_csv("amp_audit.csv")
 
 # COMMAND ----------
 
-df.columns
-
-# COMMAND ----------
-
 # MAGIC %md 
 # MAGIC ## Calculate false negatives and false positives
 
@@ -24,6 +22,7 @@ df.columns
 
 df['falseNegatives'] = df['themeIdsSystemFalseNegatives'].str.split(',')
 df['falsePositives'] = df['themeIdsSystemFalsePositives'].str.split(',')
+
 
 # COMMAND ----------
 
@@ -36,7 +35,7 @@ negatives
 
 # COMMAND ----------
 
-positives
+positives.T
 
 # COMMAND ----------
 
@@ -197,6 +196,7 @@ for _, row in audit_df.iterrows():
 
 # Create a summary DataFrame from the collected data
 summary_df = pd.DataFrame(false_data, columns=['falsePositives', 'falseScores'])
+summary_df["falseScores"] = summary_df["falseScores"].astype(float)
 
 # Calculate the total count and average falseScores for each unique "falsePositives"
 summary_table = summary_df.groupby('falsePositives').agg({'falseScores': ['count', 'mean']}).reset_index()
@@ -211,7 +211,127 @@ summary_table.sort_values(by='Average falseScores', ascending=False)
 
 # COMMAND ----------
 
+# Create the scatterplot
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=summary_table, x="Count", y="Average falseScores")
+
+# Label each point with falsePositives value
+for line in range(0, summary_table.shape[0]):
+    plt.text(
+        summary_table["Count"][line] + 0.5,
+        summary_table["Average falseScores"][line],
+        summary_table["falsePositives"][line],
+        horizontalalignment="left",
+        size="medium",
+        color="black",
+    )
+
+# Set labels and title
+plt.xlabel("Count")
+plt.ylabel("Average falseScores")
+plt.title("Scatterplot with falsePositives Labels")
+
+# Show the plot
+plt.show()
+
+# COMMAND ----------
+
+# Sort the DataFrame by the "Count" column in ascending order
+summary_table = summary_table.sort_values(by="Count", ascending=False)
+
+# Create a bar chart using Seaborn
+plt.figure(figsize=(10, 6))
+sns.barplot(data=summary_table, x="Count", y="falsePositives", palette="Blues_d")
+plt.xlabel("Count")
+plt.ylabel("False Positives")
+plt.title("Total False Positives for Each Theme)")
+plt.xticks(rotation=0)  # Rotate x-axis labels for better readability
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+# COMMAND ----------
+
 audit_df.to_csv("amp_audit_viv.csv", index=False)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Clean up datatypes
+
+# COMMAND ----------
+
+audit_df = pd.read_csv("amp_audit_viv.csv")
+
+# COMMAND ----------
+
+audit_df=audit_df.dropna(subset = ["themeIdsReviewed"])
+
+# COMMAND ----------
+
+# Functoin to clean columns
+
+def string_to_list_column(df, column):
+    df[column] = df[column].apply(lambda x: x.strip('"').split(','))
+    df[column] = df[column].apply(lambda x: [item.strip(']') for item in x])
+    df[column] = df[column].apply(lambda x: [item.strip('[') for item in x])
+    df[column] = df[column].apply(lambda x: [item.strip("'") for item in x])
+    df[column] = df[column].apply(lambda x: [item.strip("  '") for item in x])
+    if df[column].dtype == "object":
+        df[column] = df[column].apply(lambda x: [str(i) for i in x])
+    return df
+
+
+# COMMAND ----------
+
+cols_to_clean = ["themeIdsReviewed", "falsePositives", "falseScores"]
+
+for column in cols_to_clean:
+    audit_df = string_to_list_column(audit_df, column)
+
+# COMMAND ----------
+
+audit_df["falsePositives"]
+
+# COMMAND ----------
+
+# get the first element of verified theme, fales positive, and scores so that we can make a corre plot
+audit_df["themeIdsReviewed_1"] = audit_df["themeIdsReviewed"].apply(lambda x: x[0])
+audit_df["falsePositives_1"] = audit_df["falsePositives"].apply(lambda x: x[0])
+audit_df["falseScores_1"] = audit_df["falseScores"].apply(lambda x: x[0]).astype(float)
+
+
+# COMMAND ----------
+
+corr_plot = audit_df[["themeIdsReviewed_1", "falsePositives_1", "falseScores_1"]]
+
+# COMMAND ----------
+
+df_heatmap = corr_plot.pivot_table(values='falseScores_1',index='themeIdsReviewed_1',columns='falsePositives_1',aggfunc=np.mean)
+sns.heatmap(df_heatmap,annot=True, cmap = sns.cm.rocket_r)
+plt.show()
+
+# COMMAND ----------
+
+counts = corr_plot.groupby(['themeIdsReviewed_1', 'falsePositives_1']).size().reset_index(name = 'count')
+counts = counts.pivot(index = 'themeIdsReviewed_1', columns = 'falsePositives_1', values = 'count')
+
+# COMMAND ----------
+
+counts
+
+# COMMAND ----------
+
+sns.heatmap(counts,  annot = True, fmt = '.0f', cmap = sns.cm.rocket_r)
+
+# COMMAND ----------
+
+corr_plot["falsePositives_1"].value_counts()
+
+# COMMAND ----------
+
+corr_plot["themeIdsReviewed_1"].value_counts()
 
 # COMMAND ----------
 
