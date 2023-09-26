@@ -16,7 +16,7 @@ df = pd.read_csv("amp_audit.csv")
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ## Calculate false negatives and false positives
+# MAGIC ### Clean data types
 
 # COMMAND ----------
 
@@ -31,7 +31,7 @@ positives = df["falsePositives"].explode().value_counts().to_frame().T
 
 # COMMAND ----------
 
-negatives
+negatives.T
 
 # COMMAND ----------
 
@@ -258,7 +258,7 @@ audit_df.to_csv("amp_audit_viv.csv", index=False)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Clean up datatypes
+# MAGIC ### Read in audit for EDA
 
 # COMMAND ----------
 
@@ -266,7 +266,8 @@ audit_df = pd.read_csv("amp_audit_viv.csv")
 
 # COMMAND ----------
 
-audit_df=audit_df.dropna(subset = ["themeIdsReviewed"])
+# MAGIC %md
+# MAGIC ### Clean data types
 
 # COMMAND ----------
 
@@ -282,6 +283,9 @@ def string_to_list_column(df, column):
         df[column] = df[column].apply(lambda x: [str(i) for i in x])
     return df
 
+# COMMAND ----------
+
+audit_df.dropna(subset=["themeIdsReviewed"], inplace = True)
 
 # COMMAND ----------
 
@@ -289,10 +293,6 @@ cols_to_clean = ["themeIdsReviewed", "falsePositives", "falseScores"]
 
 for column in cols_to_clean:
     audit_df = string_to_list_column(audit_df, column)
-
-# COMMAND ----------
-
-audit_df["falsePositives"]
 
 # COMMAND ----------
 
@@ -319,10 +319,6 @@ counts = counts.pivot(index = 'themeIdsReviewed_1', columns = 'falsePositives_1'
 
 # COMMAND ----------
 
-counts
-
-# COMMAND ----------
-
 sns.heatmap(counts,  annot = True, fmt = '.0f', cmap = sns.cm.rocket_r)
 
 # COMMAND ----------
@@ -331,8 +327,28 @@ corr_plot["falsePositives_1"].value_counts()
 
 # COMMAND ----------
 
-corr_plot["themeIdsReviewed_1"].value_counts()
+# MAGIC %md
+# MAGIC ### Looking at character length for posts
 
 # COMMAND ----------
 
+# get character length for text
+audit_df["length"] = audit_df["textTranslated.en"].str.len()
 
+# COMMAND ----------
+
+# calculate the total number of false positives per post
+audit_df["totalFalsePositives"] = audit_df["falsePositives"].apply(lambda x: len(x))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Explore relationship with character length and total false positives
+
+# COMMAND ----------
+
+audit_df["length"].value_counts(bins=10, sort= False)
+
+# COMMAND ----------
+
+sns.scatterplot(data=audit_df, x="length", y = "totalFalsePositives")
