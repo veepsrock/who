@@ -4,13 +4,13 @@ import re
 
 # Functoin to clean columns
 def string_to_list_column(df, column):
-    df[column] = df[column].apply(lambda x: x.strip('"').split(','))
-    df[column] = df[column].apply(lambda x: [item.strip(']') for item in x])
-    df[column] = df[column].apply(lambda x: [item.strip('[') for item in x])
-    df[column] = df[column].apply(lambda x: [item.strip("'") for item in x])
-    df[column] = df[column].apply(lambda x: [item.strip("  '") for item in x])
+    df[column] = df[column].apply(lambda x: x if not isinstance(x, str) else x.strip('"').split(','))
+    df[column] = df[column].apply(lambda x: [item.strip(']') for item in x] if isinstance(x, list) else x)
+    df[column] = df[column].apply(lambda x: [item.strip('[') for item in x] if isinstance(x, list) else x)
+    df[column] = df[column].apply(lambda x: [item.strip("'") for item in x] if isinstance(x, list) else x)
+    df[column] = df[column].apply(lambda x: [item.strip("  '") for item in x] if isinstance(x, list) else x)
     if df[column].dtype == "object":
-        df[column] = df[column].apply(lambda x: [str(i) for i in x])
+        df[column] = df[column].apply(lambda x: [str(i) for i in x] if isinstance(x, list) else x)
     return df
 
 # function to clean text
