@@ -1,8 +1,20 @@
 # Databricks notebook source
 import pandas as pd
+import re
+import json
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import re
+# load functions
+with open('project_config.json','r') as fp: 
+    project_config = json.load(fp)
+ 
+module_path = os.path.join(project_config['project_module_relative_path'])
+sys.path.append(module_path)
+ 
+from data_processing import *
+
 pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
@@ -12,11 +24,52 @@ pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
 
-df = pd.read_csv('amp.csv')
+# Create a list for each row
+json_data =[]
+
+# Read in json by each lind
+with open('./evidence-10-02-23-split.json') as f:
+    for line in f:
+        json_data.append(json.loads(line))
+
+# Convert to dataframe
+json_df = pd.DataFrame(json_data)
 
 # COMMAND ----------
 
-df['labels'] = df['themeIds']
+# Unpack the evidence from its json structure, so we get the text and themeIds, issueIds, id, and status all as its own column
+evidence_list = []
+for index, row in json_df.iterrows():
+    evidence={}
+    evidence["id"] = row["_id"]
+    evidence["status"]= row["_source"].get("status", "")
+    text_translated = row["_source"].get("textTranslated", {})
+    evidence["text"] = text_translated.get("en", "")
+    evidence["themeIds"] = row["_source"].get("themeIds", np.NaN)
+    evidence["issueIds"] = row["_source"].get("issueIds", "")
+    evidence_list.append(evidence)
+
+# convert into dataframe
+evidence=pd.DataFrame(evidence_list)
+
+# COMMAND ----------
+
+# read in audit data
+audit = pd.read_csv("amp_audit.csv")
+
+# clean audit columns
+cols_to_clean = ["themeIdsReviewed", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
+
+for column in cols_to_clean:
+    audit = string_to_list_column(audit, column)
+
+# COMMAND ----------
+
+# merge with new data
+df = pd.merge(evidence, audit, how = "left", on = "id")
+
+# create labels column so I can reuse code from previous
+df["labels"] = df["themeIdsReviewed"]
 
 # COMMAND ----------
 
@@ -77,23 +130,36 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 # COMMAND ----------
 
-all_labels = list(df["themeName"].unique())
+theme_dict= {
+    "bioweapon":["bioligical weapon", "chemical agent"],
+    "conspiracy": ["conspiracy", "nefarious plots"],
+    "corruption": ["corruption", "economic exploitation", "profiteering","extortion"],
+    "media-bias": ["media slant and bias", "fake news"],
+    "medical-exploitation": ["medical exploitation", "experimental treatments", "expired medicine", "guinea pigs"],
+    "rfi": ["request for help or information", "request for medical explanation"],
+    "variants": ["disease variants", "disease genetic modifications"],
+    "alternative-cures": ["alternative cures", "herbal remedies", "home remedies", "healers and healing"],
+    "prevention-collective":["collective prevention", "lockdowns", "travel bans", "travel restrictions"],
+    "prevention-individual":["individual prevention", "non-pharmaceutical interventions", "quarantine", "face masks", "hand washing"],
+    "capacity":["capacity of public health system (hospitals, doctors, governments, aid)"],
+    "religious-practices":["religious belief", "religious leaders", "cultural practices"],
+    "treatment":["pharmaceutical treatment", "clinical treatment", "pills"],
+    "vaccine-efficacy":["vaccine efficacy", "vaccines"]
+}
 
 # COMMAND ----------
 
-for theme in list(df["manual_themeName"].unique()):
-    if theme not in all_labels:
-        all_labels.append(theme)
+theme_dict.keys()
 
 # COMMAND ----------
 
-all_labels = [x for x in all_labels if str(x) != 'nan']
+all_labels = list(theme_dict.keys())
 
 # COMMAND ----------
 
 mlb = MultiLabelBinarizer()
 mlb.fit([all_labels])
-mlb.transform([["Bio-weapon", "Vaccine Side Effects"], ["Home Remedies"]])
+# mlb.transform([["Bio-weapon", "Vaccine Side Effects"], ["Home Remedies"]])
 
 # COMMAND ----------
 
