@@ -55,7 +55,26 @@ evidence=pd.DataFrame(evidence_list)
 # COMMAND ----------
 
 # read in audit data
-audit = pd.read_csv("amp_audit.csv")
+audit = pd.read_csv("audit_10042023.csv")
+
+# COMMAND ----------
+
+audit.tail()
+
+# COMMAND ----------
+
+audit["rawPredictions"].isna().sum()
+
+# COMMAND ----------
+
+predictions = {"field":"themeIds","confidence":0.99,"id":"case-reporting","label":"Case Reporting"},{"field":"themeIds","confidence":0.99,"id":"stigmatization","label":"Affected Groups & Stigmatization"},{"field":"themeIds","confidence":0.88,"id":"rfi","label":"request for help or information, request for medical explanation"},{"field":"themeIds","confidence":0.85,"id":"conspiracy","label":"conspiracy, nefarious plots"},{"field":"themeIds","confidence":0.82,"id":"media-bias","label":"media slant and bias, fake news"},{"field":"themeIds","confidence":0.33,"id":"alternative-cures","label":"alternative cures, herbal remedies, home remedies, healers and healing"},{"field":"themeIds","confidence":0.16,"id":"prevention-collective","label":"collective prevention, lockdowns, travel bans, travel restrictions"},{"field":"themeIds","confidence":0.12,"id":"medical-exploitation","label":"medical exploitation, experimental treatments, expired medicine, guinea pigs"},{"field":"themeIds","confidence":0.11,"id":"religious-practices","label":"religious belief, religious leaders, cultural practices"},{"field":"sentiment","confidence":"0.85","id":"negative","label":"negative"}
+
+# COMMAND ----------
+
+predictions
+
+# COMMAND ----------
+
 
 # clean audit columns
 cols_to_clean = ["themeIdsReviewed", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
@@ -218,7 +237,7 @@ np.random.seed(0)
 all_indices = np.expand_dims(list(range(len(ds["train"]))), axis=1)
 indices_pool = all_indices
 labels = mlb.transform(ds["train"]["labels"])
-train_samples = [2, 4, 8, 16]
+train_samples = [8, 16, 32, 64]
 #train_samples = [8, 16, 32, 64, 128]
 train_slices, last_k = [], 0
 
