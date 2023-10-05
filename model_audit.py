@@ -11,7 +11,7 @@ pd.set_option('display.max_columns', None)
 
 # COMMAND ----------
 
-df = pd.read_csv("amp_audit.csv")
+df = pd.read_csv("audit_10042023.csv")
 
 # COMMAND ----------
 
@@ -22,20 +22,102 @@ df = pd.read_csv("amp_audit.csv")
 
 df['falseNegatives'] = df['themeIdsSystemFalseNegatives'].str.split(',')
 df['falsePositives'] = df['themeIdsSystemFalsePositives'].str.split(',')
-
-
-# COMMAND ----------
-
-negatives = df["falseNegatives"].explode().value_counts().to_frame().T
-positives = df["falsePositives"].explode().value_counts().to_frame().T
+df['themeIdsReviewed'] = df["themeIdsReviewed"].str.split(',')
 
 # COMMAND ----------
 
-negatives.T
+trues = df["themeIdsReviewed"].explode().value_counts().to_frame().reset_index()
+negatives = df["falseNegatives"].explode().value_counts().to_frame().reset_index()
+positives = df["falsePositives"].explode().value_counts().to_frame().reset_index()
 
 # COMMAND ----------
 
-positives.T
+count_table = pd.merge(trues,positives).merge(negatives).rename(columns={"index": "theme"})
+count_table = count_table.melt(id_vars="theme", var_name="predictionType", value_name = "count")
+
+# COMMAND ----------
+
+# Create a bar chart using Seaborn
+plt.figure(figsize=(10, 6))
+sns.barplot(data=count_table, x="count", y="theme", hue = "predictionType", palette=["#008753", "#df4e83", "#aad3df"])
+plt.xlabel("Count")
+plt.ylabel("Theme")
+plt.title("Themes Identifed v. False Predictions")
+plt.xticks(rotation=0)  # Rotate x-axis labels for better readability
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Word count analysis
+
+# COMMAND ----------
+
+# get character length for text
+df["wordCount"] = df["textTranslated.en"].apply(lambda x: len(str.split(x)))
+
+# COMMAND ----------
+
+def custom_len(x):
+    if isinstance(x, list):
+        return len(x)
+    return 0
+
+# calculate the total number of false positives per post
+df["totalFalsePositives"] = df["falsePositives"].apply(custom_len)
+df["totalFalseNegatives"] = df["falseNegatives"].apply(custom_len)
+df["totalTrues"] = df['themeIdsReviewed'].apply(custom_len)
+
+# COMMAND ----------
+
+totals = df[["id", "totalTrues", "totalFalsePositives", "totalFalseNegatives"]].melt(id_vars="id", var_name="predictionType", value_name = "totals")
+
+# COMMAND ----------
+
+totals
+
+# COMMAND ----------
+
+sns.displot(totals[totals["totals"]>0], x="totals", hue="predictionType", kind="kde", fill=True, multiple="stack", palette=["#008753", "#df4e83", "#aad3df"])
+
+# COMMAND ----------
+
+totals2 = df[["totalTrues", "totalFalsePositives", "totalFalseNegatives"]]
+
+# COMMAND ----------
+
+totals2
+
+# COMMAND ----------
+
+fig, axs = plt.subplots(ncols=1, nrows=3)
+
+for i, column in enumerate(totals2.columns):
+    sns.kdeplot(data =totals2, x=column, ax=axs[i], fill = True)
+    median_val = totals2[column].median()
+    axs[i].axvline(median_val, color='red', linestyle='dashed', linewidth=1, label=f'Median: {median_val}')
+    
+    # Set x-axis limits
+    axs[i].set_ylim(0, 1)
+    axs[i].set_xlim(0, 15)
+    
+    # Add labels and legend
+    axs[i].set_xlabel(column)
+    axs[i].legend()
+
+plt.tight_layout()
+plt.show()
+
+# COMMAND ----------
+
+sns.scatterplot(data=df, x="wordCount", y = "totalFalsePositives")
+
+# COMMAND ----------
+
+sns.scatterplot(data=df, x="wordCount", y = "totalFalseNegatives")
 
 # COMMAND ----------
 
@@ -337,6 +419,9 @@ audit_df["length"] = audit_df["textTranslated.en"].str.len()
 
 # COMMAND ----------
 
+# get character length for text
+audit_df["length"] = audit_df["textTranslated.en"].str.len()
+
 # calculate the total number of false positives per post
 audit_df["totalFalsePositives"] = audit_df["falsePositives"].apply(lambda x: len(x))
 
@@ -344,6 +429,14 @@ audit_df["totalFalsePositives"] = audit_df["falsePositives"].apply(lambda x: len
 
 # MAGIC %md
 # MAGIC ### Explore relationship with character length and total false positives
+
+# COMMAND ----------
+
+audit_df["totalFalsePositives"].value_counts(sort = False)
+
+# COMMAND ----------
+
+audit_df[audit_df["totalFalsePositives"] == 12]
 
 # COMMAND ----------
 
