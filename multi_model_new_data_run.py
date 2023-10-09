@@ -59,25 +59,9 @@ audit = pd.read_csv("audit_10042023.csv")
 
 # COMMAND ----------
 
-audit.tail()
-
-# COMMAND ----------
-
-audit["rawPredictions"].isna().sum()
-
-# COMMAND ----------
-
-predictions = {"field":"themeIds","confidence":0.99,"id":"case-reporting","label":"Case Reporting"},{"field":"themeIds","confidence":0.99,"id":"stigmatization","label":"Affected Groups & Stigmatization"},{"field":"themeIds","confidence":0.88,"id":"rfi","label":"request for help or information, request for medical explanation"},{"field":"themeIds","confidence":0.85,"id":"conspiracy","label":"conspiracy, nefarious plots"},{"field":"themeIds","confidence":0.82,"id":"media-bias","label":"media slant and bias, fake news"},{"field":"themeIds","confidence":0.33,"id":"alternative-cures","label":"alternative cures, herbal remedies, home remedies, healers and healing"},{"field":"themeIds","confidence":0.16,"id":"prevention-collective","label":"collective prevention, lockdowns, travel bans, travel restrictions"},{"field":"themeIds","confidence":0.12,"id":"medical-exploitation","label":"medical exploitation, experimental treatments, expired medicine, guinea pigs"},{"field":"themeIds","confidence":0.11,"id":"religious-practices","label":"religious belief, religious leaders, cultural practices"},{"field":"sentiment","confidence":"0.85","id":"negative","label":"negative"}
-
-# COMMAND ----------
-
-predictions
-
-# COMMAND ----------
-
 
 # clean audit columns
-cols_to_clean = ["themeIdsReviewed", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
+cols_to_clean = ["themeIdsReviewed", "themeIdsSystem", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
 
 for column in cols_to_clean:
     audit = string_to_list_column(audit, column)
@@ -135,6 +119,10 @@ print(f"Removed {(len_before - len(df))/len_before:.2%} duplicates.")
 
 # COMMAND ----------
 
+df["split"].value_counts()
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # Create training sets
 
@@ -163,7 +151,11 @@ theme_dict= {
     "capacity":["capacity of public health system (hospitals, doctors, governments, aid)"],
     "religious-practices":["religious belief", "religious leaders", "cultural practices"],
     "treatment":["pharmaceutical treatment", "clinical treatment", "pills"],
-    "vaccine-efficacy":["vaccine efficacy", "vaccines"]
+    "vaccine-efficacy":["vaccine efficacy", "vaccines"],
+    'case-reporting':[],
+    'stigmatization':[],
+    'symptoms-severity': [], 
+    'vaccine-side-effects':[]
 }
 
 # COMMAND ----------
@@ -354,18 +346,31 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
 
 # COMMAND ----------
 
-# from datasets import Dataset, DatasetDict
-
-# Create an instance of the custom dataset
-# ds_zero_shot = Dataset.from_pandas(df[["id", "text", "split", "labels"]].reset_index(drop=True))
-
-# mlb.transform(list(df["themeIds"]))
+audit["themeIdsReviewed"] = audit["themeIdsReviewed"].fillna("")
+trues = mlb.transform(list(audit["themeIdsReviewed"])).tolist()
 
 # COMMAND ----------
 
-from transformers import pipeline
+preds = mlb.transform(list(audit["themeIdsSystem"])).tolist()
 
-pipe = pipeline("zero-shot-classification", model="MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli")
+# COMMAND ----------
+
+audit["label_ids"] = trues
+audit["pred_label_ids"] = preds
+
+# COMMAND ----------
+
+from datasets import Dataset, DatasetDict
+
+# Create an instance of the custom dataset
+ds_zero_shot = Dataset.from_pandas(audit[["id", "textTranslated.en", "label_ids", "pred_label_ids"]].reset_index(drop=True))
+
+
+# COMMAND ----------
+
+#from transformers import pipeline
+
+#pipe = pipeline("zero-shot-classification", model="MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli")
 
 # COMMAND ----------
 
@@ -380,7 +385,7 @@ def zero_shot_pipeline(example):
     example["scores"] = output["scores"]
     return example
 
-ds_zero_shot = ds["valid"].map(zero_shot_pipeline)
+#ds_zero_shot = ds["valid"].map(zero_shot_pipeline)
 
 # COMMAND ----------
 
@@ -411,11 +416,15 @@ def get_clf_report(ds):
 
 # COMMAND ----------
 
+get_clf_report(ds_zero_shot)
+
+# COMMAND ----------
+
 macros, micros = [], []
 topks = [1, 2, 3, 4]
 for topk in topks:
-    ds_zero_shot = ds_zero_shot.map(get_preds, batched=False,
-                                    fn_kwargs={'topk': topk})
+    #ds_zero_shot = ds_zero_shot.map(get_preds, batched=False,
+    #                                fn_kwargs={'topk': topk})
     clf_report = get_clf_report(ds_zero_shot)
     micros.append(clf_report['micro avg']['f1-score'])
     macros.append(clf_report['macro avg']['f1-score'])
@@ -434,8 +443,8 @@ plt.show()
 macros, micros = [], []
 thresholds = np.linspace(0.01, 1, 100)
 for threshold in thresholds:
-    ds_zero_shot = ds_zero_shot.map(get_preds,
-                                    fn_kwargs={"threshold": threshold})
+    #ds_zero_shot = ds_zero_shot.map(get_preds,
+    #                                fn_kwargs={"threshold": threshold})
     clf_report = get_clf_report(ds_zero_shot)
     micros.append(clf_report["micro avg"]["f1-score"])
     macros.append(clf_report["macro avg"]["f1-score"])
@@ -463,8 +472,8 @@ print(f'Best threshold (micro): {best_t} with F1-score {best_macro:.2f}.')
 
 # COMMAND ----------
 
-ds_zero_shot = ds['test'].map(zero_shot_pipeline)
-ds_zero_shot = ds_zero_shot.map(get_preds, fn_kwargs={'topk': 1})
+#ds_zero_shot = ds['test'].map(zero_shot_pipeline)
+#ds_zero_shot = ds_zero_shot.map(get_preds, fn_kwargs={'topk': 1})
 clf_report = get_clf_report(ds_zero_shot)
 for train_slice in train_slices:
     macro_scores['Zero Shot'].append(clf_report['macro avg']['f1-score'])
