@@ -29,6 +29,10 @@ df= pd.read_pickle("./model_training_data.pkl")
 
 # COMMAND ----------
 
+audit.shape
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Find which labels are most common
 
@@ -101,11 +105,12 @@ mlb.fit([all_labels])
 # COMMAND ----------
 
 audit["themeIdsReviewed"] = audit["themeIdsReviewed"].fillna("")
+audit["themeIds"] = audit["themeIds"].fillna("")
 
 # COMMAND ----------
 
 audit["label_ids"] = mlb.transform(list(audit["themeIdsReviewed"])).tolist()
-audit["pred_label_ids"] = mlb.transform(list(audit["themeIdsSystem"])).tolist()
+audit["pred_label_ids"] = mlb.transform(list(audit["themeIds"])).tolist()
 
 # COMMAND ----------
 
@@ -122,7 +127,7 @@ ds_zero_shot = Dataset.from_pandas(audit[["id", "textTranslated.en", "label_ids"
 # COMMAND ----------
 
 y_true = mlb.transform(list(audit["themeIdsReviewed"]))
-y_pred = mlb.transform(list(audit["themeIdsSystem"]))
+y_pred = mlb.transform(list(audit["themeIds"]))
 
 # COMMAND ----------
 
@@ -163,4 +168,8 @@ plt.ylabel('Jaccard Index')
 plt.title('Jaccard Index for Each Label')
 plt.xticks(range(len(class_names)), ['\n'.join(name) for name in split_class_names], rotation=90)
 plt.show()
+
+
+# COMMAND ----------
+
 
