@@ -6,6 +6,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 # load functions
 with open('project_config.json','r') as fp: 
     project_config = json.load(fp)
@@ -24,52 +25,7 @@ pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
 
-# Create a list for each row
-json_data =[]
-
-# Read in json by each lind
-with open('./evidence-10-02-23-split.json') as f:
-    for line in f:
-        json_data.append(json.loads(line))
-
-# Convert to dataframe
-json_df = pd.DataFrame(json_data)
-
-# COMMAND ----------
-
-# Unpack the evidence from its json structure, so we get the text and themeIds, issueIds, id, and status all as its own column
-evidence_list = []
-for index, row in json_df.iterrows():
-    evidence={}
-    evidence["id"] = row["_id"]
-    evidence["status"]= row["_source"].get("status", "")
-    text_translated = row["_source"].get("textTranslated", {})
-    evidence["text"] = text_translated.get("en", "")
-    evidence["themeIds"] = row["_source"].get("themeIds", np.NaN)
-    evidence["issueIds"] = row["_source"].get("issueIds", "")
-    evidence_list.append(evidence)
-
-# convert into dataframe
-evidence=pd.DataFrame(evidence_list)
-
-# COMMAND ----------
-
-# read in audit data
-audit = pd.read_csv("amp_audit.csv")
-
-# clean audit columns
-cols_to_clean = ["themeIdsReviewed", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
-
-for column in cols_to_clean:
-    audit = string_to_list_column(audit, column)
-
-# COMMAND ----------
-
-# merge with new data
-df = pd.merge(evidence, audit, how = "left", on = "id")
-
-# create labels column so I can reuse code from previous
-df["labels"] = df["themeIdsReviewed"]
+df = pd.read_pickle("./model_training_data.pkl")
 
 # COMMAND ----------
 
@@ -78,7 +34,7 @@ df["labels"] = df["themeIdsReviewed"]
 
 # COMMAND ----------
 
-df_counts = df["labels"].explode().value_counts()
+df_counts = df["themeIdsReviewed"].explode().value_counts()
 
 # COMMAND ----------
 
@@ -91,12 +47,12 @@ df_counts.to_frame().head(8).T
 
 # COMMAND ----------
 
-df["labels"] = df["labels"].fillna("")
+df["themeIdsReviewed"] = df["themeIdsReviewed"].fillna("")
 
 # COMMAND ----------
 
 df["split"] = "unlabeled"
-mask = df["labels"].apply(lambda x: len(x)) > 0
+mask = df["themeIdsReviewed"].apply(lambda x: len(x)) > 0
 df.loc[mask, "split"] = "labeled"
 
 # COMMAND ----------
@@ -144,7 +100,11 @@ theme_dict= {
     "capacity":["capacity of public health system (hospitals, doctors, governments, aid)"],
     "religious-practices":["religious belief", "religious leaders", "cultural practices"],
     "treatment":["pharmaceutical treatment", "clinical treatment", "pills"],
-    "vaccine-efficacy":["vaccine efficacy", "vaccines"]
+    "vaccine-efficacy":["vaccine efficacy", "vaccines"],
+    'case-reporting':[],
+    'stigmatization':[],
+    'symptoms-severity': [], 
+    'vaccine-side-effects':[]
 }
 
 # COMMAND ----------
@@ -168,13 +128,30 @@ mlb.fit([all_labels])
 
 # COMMAND ----------
 
-df_clean = df[["text", "labels", "split"]].reset_index(drop=True).copy()
+from skmultilearn.model_selection import iterative_train_test_split
+
+def balanced_split(df, test_size=0.5):
+    ind = np.expand_dims(np.arange(len(df)), axis=1)
+    labels = mlb.transform(df["themeIdsReviewed"])
+    ind_train, _, ind_test, _ = iterative_train_test_split(ind, labels,
+                                                           test_size)
+    return df.iloc[ind_train[:, 0]], df.iloc[ind_test[:,0]]
+
+# COMMAND ----------
+
+from sklearn.model_selection import train_test_split
+
+df_clean = df[["text", "themeIdsReviewed", "split"]].reset_index(drop=True).copy()
 
 # unsupervised set
-df_unsup = df_clean.loc[df_clean["split"] == "unlabeled", ["text", "labels"]]
+df_unsup = df_clean.loc[df_clean["split"] == "unlabeled", ["text", "themeIdsReviewed"]]
 
 # supervised set
-df_sup = df_clean.loc[df_clean["split"] == "labeled", ["text", "labels"]]
+df_sup = df_clean.loc[df_clean["split"] == "labeled", ["text", "themeIdsReviewed"]]
+
+np.random.seed(0)
+df_train, df_tmp = balanced_split(df_sup, test_size=0.5)
+df_valid, df_test = balanced_split(df_tmp, test_size=0.5)
 
 # COMMAND ----------
 
@@ -186,7 +163,9 @@ df_sup = df_clean.loc[df_clean["split"] == "labeled", ["text", "labels"]]
 from datasets import Dataset, DatasetDict
 
 ds = DatasetDict({
-    "sup": Dataset.from_pandas(df_sup.reset_index(drop=True)),
+    "train": Dataset.from_pandas(df_train.reset_index(drop=True)),
+    "valid": Dataset.from_pandas(df_valid.reset_index(drop=True)),
+    "test": Dataset.from_pandas(df_test.reset_index(drop=True)),
     "unsup": Dataset.from_pandas(df_unsup.reset_index(drop=True))})
 
 
@@ -197,7 +176,43 @@ ds
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Create training slides to investigate what's the right balance of supervised to unsupervised data needed
+# MAGIC ### Create training slices to investigate what's the right balance of supervised to unsupervised data needed
+
+# COMMAND ----------
+
+np.random.seed(0)
+all_indices = np.expand_dims(list(range(len(ds["train"]))), axis=1)
+indices_pool = all_indices
+labels = mlb.transform(ds["train"]["themeIdsReviewed"])
+train_samples = [8, 16, 32]
+train_slices, last_k = [], 0
+
+for i, k in enumerate(train_samples):
+    # Split off samples necessary to fill the gap to the next split size
+    indices_pool, labels, new_slice, _ = iterative_train_test_split(
+        indices_pool, labels, (k-last_k)/len(labels))
+    last_k = k
+    if i==0: train_slices.append(new_slice)
+    else: train_slices.append(np.concatenate((train_slices[-1], new_slice)))
+
+
+# COMMAND ----------
+
+# Add full dataset as last slice
+train_slices.append(all_indices), train_samples.append(len(ds["train"]))
+
+
+# COMMAND ----------
+
+train_slices = [np.squeeze(train_slice) for train_slice in train_slices]
+
+
+# COMMAND ----------
+
+print("Target split sizes:")
+print(train_samples)
+print("Actual split sizes:")
+print([len(x) for x in train_slices])
 
 # COMMAND ----------
 
@@ -240,29 +255,6 @@ def embed_text(examples):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Figuring out the type for variables
-
-# COMMAND ----------
-
-inputs = tokenizer(ds["sup"]["text"], padding=True, truncation=True,
-                       max_length=128, return_tensors="pt")
-
-# COMMAND ----------
-
-type(inputs["attention_mask"])
-
-# COMMAND ----------
-
-with torch.no_grad():
-    model_output = model(**inputs)
-
-# COMMAND ----------
-
-type(model_output[0])
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC ### Get embedding for each split
 
 # COMMAND ----------
@@ -272,11 +264,10 @@ tokenizer.pad_token = tokenizer.eos_token
 
 # COMMAND ----------
 
-embs_train = ds["sup"].map(embed_text, batched=True, batch_size=16)
+embs_train = ds["train"].map(embed_text, batched=True, batch_size=16)
+embs_valid = ds["valid"].map(embed_text, batched=True, batch_size=16)
+embs_test = ds["test"].map(embed_text, batched=True, batch_size=16)
 
-# COMMAND ----------
-
-embs_test = ds["unsup"].map(embed_text, batched=True, batch_size=16)
 
 # COMMAND ----------
 
@@ -289,8 +280,15 @@ import pickle
 
 # COMMAND ----------
 
-embs_train_file = open("amp_embs_labels", "ab")
-embs_test_file = open("amp_embs_test", "ab")
+train_file = open("amp_embs_train", "ab")
+valid_file = open("amp_embs_valid", "ab")
+test_file = open("amp_embs_test", "ab")
+
+# COMMAND ----------
+
+pickle.dump(embs_train, train_file)
+pickle.dump(embs_valid, valid_file)
+pickle.dump(embs_test, test_file)
 
 # COMMAND ----------
 
@@ -303,13 +301,19 @@ embs_train
 
 # COMMAND ----------
 
-embs_train_file = open("amp_embs_labels", "rb")
-embs_test_file = open("amp_embs_test", "rb")
+train_file = open("amp_embs_train", "rb")
+valid_file = open("amp_embs_valid", "rb")
+test_file = open("amp_embs_test", "rb")
 
 # COMMAND ----------
 
-embs_train = pickle.load(embs_train_file)
-embs_test = pickle.load(embs_test_file)
+embs_train = pickle.load(train_file)
+embs_valid = pickle.load(valid_file)
+embs_test = pickle.load(test_file)
+
+# COMMAND ----------
+
+embs_train
 
 # COMMAND ----------
 
@@ -318,11 +322,21 @@ embs_test = pickle.load(embs_test_file)
 
 # COMMAND ----------
 
-pip install faiss-gpu
+import faiss
 
 # COMMAND ----------
 
-import faiss
+# MAGIC %md
+# MAGIC # Add embedding index
+
+# COMMAND ----------
+
+embs_train.add_faiss_index("embedding")
+
+
+# COMMAND ----------
+
+embs_valid
 
 # COMMAND ----------
 
@@ -331,85 +345,4 @@ import faiss
 
 # COMMAND ----------
 
-test_queries = np.array(embs_test["embedding"], dtype=np.float32)
 
-# COMMAND ----------
-
-embs_train.add_faiss_index("embedding")
-
-# COMMAND ----------
-
-_, samples = embs_train.get_nearest_examples_batch("embedding", test_queries, k = 4)
-
-# COMMAND ----------
-
-len(samples)
-
-# COMMAND ----------
-
-len(y_pred)
-
-# COMMAND ----------
-
-samples[0]["text"]
-
-# COMMAND ----------
-
-samples[0]["labels"]
-
-# COMMAND ----------
-
-def get_sample_preds(sample):
-    return sample["labels"][0:2]
-
-# COMMAND ----------
-
-y_pred = [get_sample_preds(s) for s in samples]
-
-# COMMAND ----------
-
-y_pred[64]
-
-# COMMAND ----------
-
-predictions = pd.DataFrame({"text": embs_test["text"],
-             "themeName": y_pred})
-
-# COMMAND ----------
-
-predictions
-
-# COMMAND ----------
-
-predictions.to_csv("few_shot_predictions.csv", index = False)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC # Try getting prediction for single input
-
-# COMMAND ----------
-
-sample_text = "CBD oil is a cure for COVID-19."
-
-# COMMAND ----------
-
-def embed_single_text(text):
-    inputs = tokenizer(text, padding=True, truncation=True,
-                       max_length=128, return_tensors="pt")
-    with torch.no_grad():
-        model_output = model(**inputs)
-    pooled_embeds = mean_pooling(model_output, inputs["attention_mask"])
-    return {"embedding": pooled_embeds.cpu().numpy()}
-
-# COMMAND ----------
-
-embs_sample = embed_single_text(sample_text)
-
-# COMMAND ----------
-
-scores, sample = embs_train.get_nearest_examples_batch("embedding", embs_sample["embedding"], k = 4)
-
-# COMMAND ----------
-
-sample[0]["labels"]
