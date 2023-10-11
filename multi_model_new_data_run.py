@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import numpy as np
+import pickle
 import matplotlib.pyplot as plt
 # load functions
 with open('project_config.json','r') as fp: 
@@ -24,55 +25,12 @@ pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
 
-# Create a list for each row
-json_data =[]
-
-# Read in json by each lind
-with open('./evidence-10-02-23-split.json') as f:
-    for line in f:
-        json_data.append(json.loads(line))
-
-# Convert to dataframe
-json_df = pd.DataFrame(json_data)
-
-# COMMAND ----------
-
-# Unpack the evidence from its json structure, so we get the text and themeIds, issueIds, id, and status all as its own column
-evidence_list = []
-for index, row in json_df.iterrows():
-    evidence={}
-    evidence["id"] = row["_id"]
-    evidence["status"]= row["_source"].get("status", "")
-    text_translated = row["_source"].get("textTranslated", {})
-    evidence["text"] = text_translated.get("en", "")
-    evidence["themeIds"] = row["_source"].get("themeIds", np.NaN)
-    evidence["issueIds"] = row["_source"].get("issueIds", "")
-    evidence_list.append(evidence)
-
-# convert into dataframe
-evidence=pd.DataFrame(evidence_list)
-
-# COMMAND ----------
-
 # read in audit data
-audit = pd.read_csv("audit_10042023.csv")
+audit = pd.read_pickle("audit_model_training_data.pkl")
 
-# COMMAND ----------
+# read in eval data
+df= pd.read_pickle("./model_training_data.pkl")  
 
-
-# clean audit columns
-cols_to_clean = ["themeIdsReviewed", "themeIdsSystem", "themeIdsSystemFalseNegatives", "themeIdsSystemFalsePositives"]
-
-for column in cols_to_clean:
-    audit = string_to_list_column(audit, column)
-
-# COMMAND ----------
-
-# merge with new data
-df = pd.merge(evidence, audit, how = "left", on = "id")
-
-# create labels column so I can reuse code from previous
-df["labels"] = df["themeIdsReviewed"]
 
 # COMMAND ----------
 
@@ -81,7 +39,7 @@ df["labels"] = df["themeIdsReviewed"]
 
 # COMMAND ----------
 
-df_counts = df["labels"].explode().value_counts()
+df_counts = df["themeIdsReviewed"].explode().value_counts()
 
 # COMMAND ----------
 
@@ -94,12 +52,12 @@ df_counts.to_frame().head(8).T
 
 # COMMAND ----------
 
-df["labels"] = df["labels"].fillna("")
+df["themeIdsReviewed"] = df["themeIdsReviewed"].fillna("")
 
 # COMMAND ----------
 
 df["split"] = "unlabeled"
-mask = df["labels"].apply(lambda x: len(x)) > 0
+mask = df["themeIdsReviewed"].apply(lambda x: len(x)) > 0
 df.loc[mask, "split"] = "labeled"
 
 # COMMAND ----------
@@ -179,20 +137,20 @@ from skmultilearn.model_selection import iterative_train_test_split
 
 def balanced_split(df, test_size=0.5):
     ind = np.expand_dims(np.arange(len(df)), axis=1)
-    labels = mlb.transform(df["labels"])
+    labels = mlb.transform(df["themeIdsReviewed"])
     ind_train, _, ind_test, _ = iterative_train_test_split(ind, labels,
                                                            test_size)
     return df.iloc[ind_train[:, 0]], df.iloc[ind_test[:,0]]
 
 # COMMAND ----------
 
-df_clean = df[["text", "labels", "split"]].reset_index(drop=True).copy()
+df_clean = df[["text", "themeIdsReviewed", "split"]].reset_index(drop=True).copy()
 
 # unsupervised set
-df_unsup = df_clean.loc[df_clean["split"] == "unlabeled", ["text", "labels"]]
+df_unsup = df_clean.loc[df_clean["split"] == "unlabeled", ["text", "themeIdsReviewed"]]
 
 # supervised set
-df_sup = df_clean.loc[df_clean["split"] == "labeled", ["text", "labels"]]
+df_sup = df_clean.loc[df_clean["split"] == "labeled", ["text", "themeIdsReviewed"]]
 
 np.random.seed(28)
 df_train, df_tmp = balanced_split(df_sup, test_size=0.5)
@@ -228,7 +186,7 @@ ds
 np.random.seed(0)
 all_indices = np.expand_dims(list(range(len(ds["train"]))), axis=1)
 indices_pool = all_indices
-labels = mlb.transform(ds["train"]["labels"])
+labels = mlb.transform(ds["train"]["themeIdsReviewed"])
 train_samples = [8, 16, 32, 64]
 #train_samples = [8, 16, 32, 64, 128]
 train_slices, last_k = [], 0
@@ -260,7 +218,7 @@ print([len(x) for x in train_slices])
 # COMMAND ----------
 
 def prepare_labels(batch):
-    batch["label_ids"] = mlb.transform(batch["labels"])
+    batch["label_ids"] = mlb.transform(batch["themeIdsReviewed"])
     return batch
 
 ds = ds.map(prepare_labels, batched=True)
