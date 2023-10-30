@@ -29,6 +29,10 @@ df = pd.read_pickle("./model_training_data.pkl")
 
 # COMMAND ----------
 
+df["text"] = df["text"].fillna(df["textTranslated.en"])
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Find which labels are most common
 
@@ -184,7 +188,7 @@ np.random.seed(0)
 all_indices = np.expand_dims(list(range(len(ds["train"]))), axis=1)
 indices_pool = all_indices
 labels = mlb.transform(ds["train"]["themeIdsReviewed"])
-train_samples = [8, 16, 32]
+train_samples = [8, 16, 32, 64, 128]
 train_slices, last_k = [], 0
 
 for i, k in enumerate(train_samples):
@@ -342,6 +346,44 @@ embs_valid
 
 # MAGIC %md
 # MAGIC ## Remove the fiass embedding so we can compare to NB
+
+# COMMAND ----------
+
+test_queries = np.array(embs_test["embedding"], dtype=np.float32)
+
+# COMMAND ----------
+
+embs_train.add_faiss_index("embedding")
+
+# COMMAND ----------
+
+_, samples = embs_train.get_nearest_examples_batch("embedding", test_queries, k = 4)
+
+# COMMAND ----------
+
+def get_sample_preds(sample):
+    return sample["themeIdsReviewed"][0]
+
+# COMMAND ----------
+
+samples[0]["themeIdsReviewed"][0]
+
+# COMMAND ----------
+
+y_pred = [get_sample_preds(s) for s in samples]
+
+# COMMAND ----------
+
+# write to df
+predictions = pd.DataFrame({"text": embs_test["text"], "fewShotTheme": y_pred})
+
+# COMMAND ----------
+
+predictions.tail()
+
+# COMMAND ----------
+
+predictions.shape
 
 # COMMAND ----------
 
