@@ -221,6 +221,56 @@ print([len(x) for x in train_slices])
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC # Run Naive Bayes baseline
+# MAGIC
+
+# COMMAND ----------
+
+from collections import defaultdict
+
+macro_scores, micro_scores = defaultdict(list), defaultdict(list)
+
+def prepare_labels(batch):
+    batch["label_ids"] = mlb.transform(batch["themeIdsReviewed"])
+    return batch
+
+ds = ds.map(prepare_labels, batched=True)
+
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import classification_report
+from skmultilearn.problem_transform import BinaryRelevance
+from sklearn.feature_extraction.text import CountVectorizer
+
+for train_slice in train_slices:
+    # Get training slice and test data
+    ds_train_sample = ds["train"].select(train_slice)
+    y_train = np.array(ds_train_sample["label_ids"])
+    y_test = np.array(ds["test"]["label_ids"])
+    # Use a simple count vectorizer to encode our texts as token counts
+    count_vect = CountVectorizer()
+    X_train_counts = count_vect.fit_transform(ds_train_sample["text"])
+    X_test_counts = count_vect.transform(ds["test"]["text"])
+    # Create and train our model!
+    classifier = BinaryRelevance(classifier=MultinomialNB())
+    classifier.fit(X_train_counts, y_train)
+    # Generate predictions and evaluate
+    y_pred_test = classifier.predict(X_test_counts)
+    clf_report = classification_report(
+        y_test, y_pred_test, target_names=mlb.classes_, zero_division=0,
+        output_dict=True)
+    # Store metrics
+    macro_scores["Naive Bayes"].append(clf_report["macro avg"]["f1-score"])
+    micro_scores["Naive Bayes"].append(clf_report["micro avg"]["f1-score"])
+
+# COMMAND ----------
+
+# write to pickle to save
+ds_file = open("model_dataset", "ab")
+pickle.dump(ds, ds_file)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC # Use embeddings as a lookup table
 
 # COMMAND ----------
@@ -230,7 +280,7 @@ from transformers import AutoTokenizer, AutoModel
 
 # COMMAND ----------
 
-model_ckpt = "miguelvictor/python-gpt2-large"
+model_ckpt = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 model = AutoModel.from_pretrained(model_ckpt)
 
@@ -272,6 +322,10 @@ embs_train = ds["train"].map(embed_text, batched=True, batch_size=16)
 embs_valid = ds["valid"].map(embed_text, batched=True, batch_size=16)
 embs_test = ds["test"].map(embed_text, batched=True, batch_size=16)
 
+
+# COMMAND ----------
+
+embs_train
 
 # COMMAND ----------
 
@@ -330,22 +384,111 @@ import faiss
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC # Add embedding index
-
-# COMMAND ----------
-
 embs_train.add_faiss_index("embedding")
 
 
 # COMMAND ----------
 
-embs_valid
+valid_labels = np.array(embs_valid["label_ids"])
+valid_queries = np.array(embs_valid["embedding"], dtype=np.float32)
+perf_micro, perf_macro = find_best_k_m(embs_train, valid_queries, valid_labels)
+
+# COMMAND ----------
+
+def get_sample_preds(sample, m):
+    return (np.sum(sample["label_ids"], axis=0) >= m).astype(int)
+
+def find_best_k_m(ds_train, valid_queries, valid_labels, max_k=17):
+    max_k = min(len(ds_train), max_k)
+    perf_micro = np.zeros((max_k, max_k))
+    perf_macro = np.zeros((max_k, max_k))
+    for k in range(1, max_k):
+        for m in range(1, k + 1):
+            _, samples = ds_train.get_nearest_examples_batch("embedding",
+                                                             valid_queries, k=k)
+            y_pred = np.array([get_sample_preds(s, m) for s in samples])
+            clf_report = classification_report(valid_labels, y_pred,
+                target_names=mlb.classes_, zero_division=0, output_dict=True)
+            perf_micro[k, m] = clf_report["micro avg"]["f1-score"]
+            perf_macro[k, m] = clf_report["macro avg"]["f1-score"]
+    return perf_micro, perf_macro
+
+# COMMAND ----------
+
+#embs_train.drop_index("embedding")
+test_labels = np.array(embs_test["label_ids"])
+test_queries = np.array(embs_test["embedding"], dtype=np.float32)
+
+for train_slice in train_slices:
+    # Create a Faiss index from training slice
+    embs_train_tmp = embs_train.select(train_slice)
+    embs_train_tmp.add_faiss_index("embedding")
+
+    # Get best k, m values with validation set
+    perf_micro, _ = find_best_k_m(embs_train_tmp, valid_queries, valid_labels)
+    k, m = np.unravel_index(perf_micro.argmax(), perf_micro.shape)
+
+    # Get predictions on test set
+    _, samples = embs_train_tmp.get_nearest_examples_batch("embedding", test_queries, k = int(k))
+    y_pred = np.array([get_sample_preds(s, m) for s in samples])
+    # Evaluate predictions
+    clf_report = classification_report(test_labels, y_pred,
+        target_names=mlb.classes_, zero_division=0, output_dict=True,)
+    macro_scores["Embedding"].append(clf_report["macro avg"]["f1-score"])
+    micro_scores["Embedding"].append(clf_report["micro avg"]["f1-score"])
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Remove the fiass embedding so we can compare to NB
+# MAGIC # Plot Performance
+
+# COMMAND ----------
+
+import matplotlib.pyplot as plt
+
+def plot_metrics(micro_scores, macro_scores, sample_sizes, current_model):
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+
+    for run in micro_scores.keys():
+        if run == current_model:
+            ax0.plot(sample_sizes, micro_scores[run], label=run, linewidth=2)
+            ax1.plot(sample_sizes, macro_scores[run], label=run, linewidth=2)
+        else:
+            ax0.plot(sample_sizes, micro_scores[run], label=run,
+                     linestyle="dashed")
+            ax1.plot(sample_sizes, macro_scores[run], label=run,
+                     linestyle="dashed")
+
+    ax0.set_title("Micro F1 scores")
+    ax1.set_title("Macro F1 scores")
+    ax0.set_ylabel("Test set F1 score")
+    ax0.legend(loc="lower right")
+    for ax in [ax0, ax1]:
+        ax.set_xlabel("Number of training samples")
+        ax.set_xscale("log")
+        ax.set_xticks(sample_sizes)
+        ax.set_xticklabels(sample_sizes)
+        ax.minorticks_off()
+    plt.tight_layout()
+    plt.show()
+
+# COMMAND ----------
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
+
+
+# COMMAND ----------
+
+macro_scores["Embedding"] = macro_scores["Embedding"][6:]
+
+# COMMAND ----------
+
+micro_scores["Embedding"] = micro_scores["Embedding"][6:]
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## For getting predicitons on new data
 
 # COMMAND ----------
 
@@ -384,6 +527,25 @@ predictions.tail()
 # COMMAND ----------
 
 predictions.shape
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # Run on all ds
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
+
+
+# COMMAND ----------
+
+plot_metrics(micro_scores, macro_scores, train_samples, "Embedding")
+
 
 # COMMAND ----------
 
