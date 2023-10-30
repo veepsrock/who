@@ -439,6 +439,10 @@ for train_slice in train_slices:
 
 # COMMAND ----------
 
+ds
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # Plot Performance
 
@@ -488,11 +492,32 @@ micro_scores["Embedding"] = micro_scores["Embedding"][6:]
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## For getting predicitons on new data
+# MAGIC # Get scores for zeroshot values
 
 # COMMAND ----------
 
-test_queries = np.array(embs_test["embedding"], dtype=np.float32)
+ds
+
+# COMMAND ----------
+
+for train_slice in train_slices:
+    # Get training slice and test data
+    ds_train_sample = ds["train"].select(train_slice)
+    y_train = np.array(ds_train_sample["label_ids"])
+    y_test = np.array(ds["test"]["label_ids"])
+    # Generate predictions and evaluate
+    y_pred_test = np.array(ds["valid"]["label_ids"])
+    clf_report = classification_report(
+        y_test, y_pred_test, target_names=mlb.classes_, zero_division=0,
+        output_dict=True)
+    # Store metrics
+    macro_scores["Zero shot"].append(clf_report["macro avg"]["f1-score"])
+    micro_scores["Zero shot"].append(clf_report["micro avg"]["f1-score"])
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## For getting predicitons on new data
 
 # COMMAND ----------
 
@@ -500,6 +525,7 @@ embs_train.add_faiss_index("embedding")
 
 # COMMAND ----------
 
+test_queries = np.array(embs_valid["embedding"], dtype=np.float32)
 _, samples = embs_train.get_nearest_examples_batch("embedding", test_queries, k = 4)
 
 # COMMAND ----------
@@ -517,12 +543,28 @@ y_pred = [get_sample_preds(s) for s in samples]
 
 # COMMAND ----------
 
+temp_predictions = pd.DataFrame({"text": embs_valid["text"], "fewShotTheme": y_pred})
+
+# COMMAND ----------
+
+temp_predictions.shape
+
+# COMMAND ----------
+
+predictions = pd.concat([predictions, temp_predictions])
+
+# COMMAND ----------
+
+predictions.to_csv("few_shot_predictions.csv", index = False)
+
+# COMMAND ----------
+
 # write to df
 predictions = pd.DataFrame({"text": embs_test["text"], "fewShotTheme": y_pred})
 
 # COMMAND ----------
 
-predictions.tail()
+predictions.shape
 
 # COMMAND ----------
 
