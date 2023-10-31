@@ -55,12 +55,30 @@ count_table = count_table.melt(id_vars="theme", var_name="predictionType", value
 
 # COMMAND ----------
 
+count_table.head()
+
+# COMMAND ----------
+
+count_table = count_table[count_table["predictionType"]!= "themeIdsReviewed"]
+count_table["predictionType"] = count_table["predictionType"].str.replace("themeIdsSystemFalsePositives", "False Positives")
+count_table["predictionType"] = count_table["predictionType"].str.replace("themeIdsSystemFalseNegatives", "False Negatives")
+
+# COMMAND ----------
+
+palette=["#008753", "#df4e83", "#aad3df"]
+
+# COMMAND ----------
+
+count_table[count_table["theme"] == "prevention-collective"]]
+
+# COMMAND ----------
+
 # Create a bar chart using Seaborn
 plt.figure(figsize=(10, 6))
 sns.barplot(data=count_table, x="count", y="theme", hue = "predictionType", palette=["#008753", "#df4e83", "#aad3df"])
 plt.xlabel("Count")
 plt.ylabel("Theme")
-plt.title("Themes Identifed v. False Predictions")
+plt.title("False Positives v. False Negatives")
 plt.xticks(rotation=0)  # Rotate x-axis labels for better readability
 
 # Show the plot

@@ -34,6 +34,19 @@ df["text"] = df["text"].fillna(df["textTranslated.en"])
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC # Try taking the first two labels from model predictions and dropping rfi
+
+# COMMAND ----------
+
+df["themeIds"] = df['themeIds'].apply(lambda themes: [theme for theme in themes if theme != 'rfi'] if isinstance(themes, list) else themes)
+
+# COMMAND ----------
+
+df["themeIds"]=df["themeIds"].apply(lambda x: x[:2] if isinstance(x, list) else x)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Find which labels are most common
 
 # COMMAND ----------
@@ -90,13 +103,14 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 # COMMAND ----------
 
+   # "rfi": ["request for help or information", "request for medical explanation"],
+
 theme_dict= {
     "bioweapon":["bioligical weapon", "chemical agent"],
     "conspiracy": ["conspiracy", "nefarious plots"],
     "corruption": ["corruption", "economic exploitation", "profiteering","extortion"],
     "media-bias": ["media slant and bias", "fake news"],
     "medical-exploitation": ["medical exploitation", "experimental treatments", "expired medicine", "guinea pigs"],
-    "rfi": ["request for help or information", "request for medical explanation"],
     "variants": ["disease variants", "disease genetic modifications"],
     "alternative-cures": ["alternative cures", "herbal remedies", "home remedies", "healers and healing"],
     "prevention-collective":["collective prevention", "lockdowns", "travel bans", "travel restrictions"],
@@ -172,10 +186,6 @@ ds = DatasetDict({
     "test": Dataset.from_pandas(df_test.reset_index(drop=True)),
     "unsup": Dataset.from_pandas(df_unsup.reset_index(drop=True))})
 
-
-# COMMAND ----------
-
-ds
 
 # COMMAND ----------
 
@@ -325,16 +335,8 @@ embs_test = ds["test"].map(embed_text, batched=True, batch_size=16)
 
 # COMMAND ----------
 
-embs_train
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ## Write to pickle to save
-
-# COMMAND ----------
-
-import pickle
 
 # COMMAND ----------
 
@@ -356,22 +358,14 @@ embs_train
 
 # MAGIC %md
 # MAGIC ### For when we want to load data back in
-
-# COMMAND ----------
-
-train_file = open("amp_embs_train", "rb")
-valid_file = open("amp_embs_valid", "rb")
-test_file = open("amp_embs_test", "rb")
-
-# COMMAND ----------
-
-embs_train = pickle.load(train_file)
-embs_valid = pickle.load(valid_file)
-embs_test = pickle.load(test_file)
-
-# COMMAND ----------
-
-embs_train
+# MAGIC
+# MAGIC train_file = open("amp_embs_train", "rb")
+# MAGIC valid_file = open("amp_embs_valid", "rb")
+# MAGIC test_file = open("amp_embs_test", "rb")
+# MAGIC
+# MAGIC embs_train = pickle.load(train_file)
+# MAGIC embs_valid = pickle.load(valid_file)
+# MAGIC embs_test = pickle.load(test_file)
 
 # COMMAND ----------
 
@@ -386,12 +380,6 @@ import faiss
 
 embs_train.add_faiss_index("embedding")
 
-
-# COMMAND ----------
-
-valid_labels = np.array(embs_valid["label_ids"])
-valid_queries = np.array(embs_valid["embedding"], dtype=np.float32)
-perf_micro, perf_macro = find_best_k_m(embs_train, valid_queries, valid_labels)
 
 # COMMAND ----------
 
@@ -415,7 +403,13 @@ def find_best_k_m(ds_train, valid_queries, valid_labels, max_k=17):
 
 # COMMAND ----------
 
-#embs_train.drop_index("embedding")
+valid_labels = np.array(embs_valid["label_ids"])
+valid_queries = np.array(embs_valid["embedding"], dtype=np.float32)
+perf_micro, perf_macro = find_best_k_m(embs_train, valid_queries, valid_labels)
+
+# COMMAND ----------
+
+embs_train.drop_index("embedding")
 test_labels = np.array(embs_test["label_ids"])
 test_queries = np.array(embs_test["embedding"], dtype=np.float32)
 
@@ -436,10 +430,6 @@ for train_slice in train_slices:
         target_names=mlb.classes_, zero_division=0, output_dict=True,)
     macro_scores["Embedding"].append(clf_report["macro avg"]["f1-score"])
     micro_scores["Embedding"].append(clf_report["micro avg"]["f1-score"])
-
-# COMMAND ----------
-
-ds
 
 # COMMAND ----------
 
@@ -483,6 +473,18 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC F1 score:
+# MAGIC The F1 score combines both precision and recall into a single metric. It's like looking at both precision and recall at the same time. A high F1 score indicates that the model is both accurate in its predictions and able to capture most of the positive cases.
+# MAGIC Micro F1 score:
+# MAGIC
+# MAGIC This considers the overall performance of the model across all the classes. A low Micro F1 score means the model is not doing well in predicting any of the classes.
+# MAGIC Macro F1 score:
+# MAGIC
+# MAGIC This takes the average of the F1 scores of each class. If the Macro F1 score is low, it means the model is struggling to predict each category correctly.
+
+# COMMAND ----------
+
 macro_scores["Embedding"] = macro_scores["Embedding"][6:]
 
 # COMMAND ----------
@@ -496,88 +498,29 @@ micro_scores["Embedding"] = micro_scores["Embedding"][6:]
 
 # COMMAND ----------
 
-ds
+from sklearn.metrics import f1_score
 
 # COMMAND ----------
 
-for train_slice in train_slices:
-    # Get training slice and test data
-    ds_train_sample = ds["train"].select(train_slice)
-    y_train = np.array(ds_train_sample["label_ids"])
-    y_test = np.array(ds["test"]["label_ids"])
-    # Generate predictions and evaluate
-    y_pred_test = np.array(ds["valid"]["label_ids"])
-    clf_report = classification_report(
-        y_test, y_pred_test, target_names=mlb.classes_, zero_division=0,
-        output_dict=True)
-    # Store metrics
-    macro_scores["Zero shot"].append(clf_report["macro avg"]["f1-score"])
-    micro_scores["Zero shot"].append(clf_report["micro avg"]["f1-score"])
+audit = pd.read_pickle("./audit_model_training_data.pkl")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## For getting predicitons on new data
+audit.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
 
 # COMMAND ----------
 
-embs_train.add_faiss_index("embedding")
+audit.head()
 
 # COMMAND ----------
 
-test_queries = np.array(embs_valid["embedding"], dtype=np.float32)
-_, samples = embs_train.get_nearest_examples_batch("embedding", test_queries, k = 4)
+y_true = mlb.transform(audit["themeIdsReviewed"])
+y_pred = mlb.transform(audit["themeIds"])
 
 # COMMAND ----------
 
-def get_sample_preds(sample):
-    return sample["themeIdsReviewed"][0]
-
-# COMMAND ----------
-
-samples[0]["themeIdsReviewed"][0]
-
-# COMMAND ----------
-
-y_pred = [get_sample_preds(s) for s in samples]
-
-# COMMAND ----------
-
-temp_predictions = pd.DataFrame({"text": embs_valid["text"], "fewShotTheme": y_pred})
-
-# COMMAND ----------
-
-temp_predictions.shape
-
-# COMMAND ----------
-
-predictions = pd.concat([predictions, temp_predictions])
-
-# COMMAND ----------
-
-predictions.to_csv("few_shot_predictions.csv", index = False)
-
-# COMMAND ----------
-
-# write to df
-predictions = pd.DataFrame({"text": embs_test["text"], "fewShotTheme": y_pred})
-
-# COMMAND ----------
-
-predictions.shape
-
-# COMMAND ----------
-
-predictions.shape
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC # Run on all ds
-
-# COMMAND ----------
-
-
+macro_scores["Zero Shot"] = [f1_score(y_true, y_pred, average='macro')]*6
+micro_scores["Zero Shot"] = [f1_score(y_true, y_pred, average='micro')]*6
 
 # COMMAND ----------
 
@@ -586,8 +529,47 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
 
 # COMMAND ----------
 
-plot_metrics(micro_scores, macro_scores, train_samples, "Embedding")
+# MAGIC %md
+# MAGIC ## Run embeddings model on all audit dataset so we can use for model validation later
 
+# COMMAND ----------
+
+embs_train.add_faiss_index("embedding")
+
+# COMMAND ----------
+
+def embed_single_text(text):
+    inputs = tokenizer(text, padding=True, truncation=True,
+                       max_length=128, return_tensors="pt")
+    with torch.no_grad():
+        model_output = model(**inputs)
+    pooled_embeds = mean_pooling(model_output, inputs["attention_mask"])
+    return {"embedding": pooled_embeds.cpu().numpy()}
+
+# COMMAND ----------
+
+def get_embedding_predictions(df):
+    result_list=[]
+    for i, row in df.iterrows():
+        embs_sample = embed_single_text(row["textTranslated.en"])
+        scores, sample = embs_train.get_nearest_examples_batch("embedding", embs_sample["embedding"], k = 4)
+        embs_sample["embeddingScores"] = scores
+        embs_sample["embeddingPredictions"] = sample[0]["themeIdsReviewed"][0]
+        embs_sample["textTranslated.en"] = row["textTranslated.en"]
+        result_list.append(embs_sample)
+    result_df = pd.DataFrame(result_list)
+    result_df = pd.merge(df, result_df, on = "textTranslated.en", how = "left")
+    return result_df
+
+# COMMAND ----------
+
+embedding_predictions = get_embedding_predictions(audit)
+
+# COMMAND ----------
+
+# write to save
+embedding_file = open("embedding_predictions", "ab")
+pickle.dump(embedding_predictions, embedding_file)
 
 # COMMAND ----------
 
