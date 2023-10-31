@@ -21,15 +21,13 @@ pd.set_option("display.max_columns" , 50)
 # COMMAND ----------
 
 # read in audit data
-audit = pd.read_pickle("audit_model_training_data.pkl")
-
-# read in eval data
-df= pd.read_pickle("./model_training_data.pkl")  
+df= pd.read_pickle("./embedding_predictions")  
+df["text"]= df["textTranslated.en"]
 
 
 # COMMAND ----------
 
-audit.shape
+df.head()
 
 # COMMAND ----------
 
@@ -57,11 +55,6 @@ print(f"Removed {(len_before - len(df))/len_before:.2%} duplicates.")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC # Create training sets
-
-# COMMAND ----------
-
 from sklearn.preprocessing import MultiLabelBinarizer
 
 # COMMAND ----------
@@ -77,7 +70,6 @@ theme_dict= {
     "corruption": ["corruption", "economic exploitation", "profiteering","extortion"],
     "media-bias": ["media slant and bias", "fake news"],
     "medical-exploitation": ["medical exploitation", "experimental treatments", "expired medicine", "guinea pigs"],
-    "rfi": ["request for help or information", "request for medical explanation"],
     "variants": ["disease variants", "disease genetic modifications"],
     "alternative-cures": ["alternative cures", "herbal remedies", "home remedies", "healers and healing"],
     "prevention-collective":["collective prevention", "lockdowns", "travel bans", "travel restrictions"],
@@ -104,13 +96,13 @@ mlb.fit([all_labels])
 
 # COMMAND ----------
 
-audit["themeIdsReviewed"] = audit["themeIdsReviewed"].fillna("")
-audit["themeIds"] = audit["themeIds"].fillna("")
+df["themeIdsReviewed"] = df["themeIdsReviewed"].fillna("")
+df["themeIds"] = df["themeIds"].fillna("")
 
 # COMMAND ----------
 
-audit["label_ids"] = mlb.transform(list(audit["themeIdsReviewed"])).tolist()
-audit["pred_label_ids"] = mlb.transform(list(audit["themeIds"])).tolist()
+df["label_ids"] = mlb.transform(list(df["themeIdsReviewed"])).tolist()
+df["pred_label_ids"] = mlb.transform(list(df["themeIds"])).tolist()
 
 # COMMAND ----------
 
@@ -126,16 +118,12 @@ ds_zero_shot = Dataset.from_pandas(audit[["id", "textTranslated.en", "label_ids"
 
 # COMMAND ----------
 
-y_true = mlb.transform(list(audit["themeIdsReviewed"]))
-y_pred = mlb.transform(list(audit["themeIds"]))
+y_true = mlb.transform(list(df["themeIdsReviewed"]))
+y_pred = mlb.transform(list(df["themeIds"]))
 
 # COMMAND ----------
 
 jaccard_scores = jaccard_score(y_true,y_pred, average =None)
-
-# COMMAND ----------
-
-jaccard_scores
 
 # COMMAND ----------
 
@@ -165,7 +153,86 @@ plt.figure(figsize=(8, 4))
 plt.bar(mlb.classes_, jaccard_scores, color='skyblue')
 plt.xlabel('Labels')
 plt.ylabel('Jaccard Index')
+plt.ylim([0,1])
 plt.title('Jaccard Index for Each Label')
+plt.xticks(range(len(class_names)), ['\n'.join(name) for name in split_class_names], rotation=90)
+plt.show()
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # Breakdown for each theme
+
+# COMMAND ----------
+
+trues = df["themeIdsReviewed"].explode().value_counts().to_frame().reset_index()
+negatives = df["themeIdsSystemFalseNegatives"].explode().value_counts().to_frame().reset_index()
+positives = df["themeIdsSystemFalsePositives"].explode().value_counts().to_frame().reset_index()
+
+# COMMAND ----------
+
+count_table = pd.merge(trues,positives).merge(negatives).rename(columns={"index": "theme"})
+count_table = count_table.melt(id_vars="theme", var_name="predictionType", value_name = "count")
+
+# COMMAND ----------
+
+count_table.shape
+
+# COMMAND ----------
+
+count_table = count_table[count_table["theme"]!= "rfi"]
+count_table = count_table[count_table["theme"]!= "case-reporting"]
+
+# COMMAND ----------
+
+count_table.shape
+
+# COMMAND ----------
+
+# Create a bar chart using Seaborn
+plt.figure(figsize=(10, 6))
+sns.barplot(data=count_table, x="count", y="theme", hue = "predictionType", palette=["#008753", "#df4e83", "#aad3df"])
+plt.xlabel("Count")
+plt.ylabel("Theme")
+plt.title("False Positives v. False Negatives")
+plt.xticks(rotation=0)  # Rotate x-axis labels for better readability
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # Run jaccard for embeddings
+
+# COMMAND ----------
+
+df.head()
+
+# COMMAND ----------
+
+y_true_embs = mlb.transform(list(df["themeIdsReviewed"]))
+y_pred_embs = mlb.transform(list(df["embeddingPredictions"]))
+
+# COMMAND ----------
+
+jaccard_scores_embs = jaccard_score(y_true_embs,y_pred_embs, average =None)
+
+# COMMAND ----------
+
+# Extract and split long class names by "-"
+class_names = mlb.classes_
+split_class_names = [name.split('-') for name in class_names]
+
+# Plot Jaccard Index for each label
+plt.figure(figsize=(8, 4))
+plt.bar(mlb.classes_, jaccard_scores_embs, color='skyblue')
+plt.xlabel('Labels')
+plt.ylabel('Jaccard Index')
+plt.title('Jaccard Index for Each Label')
+plt.ylim([0,1])
 plt.xticks(range(len(class_names)), ['\n'.join(name) for name in split_class_names], rotation=90)
 plt.show()
 
