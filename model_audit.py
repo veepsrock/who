@@ -162,11 +162,11 @@ sns.scatterplot(data=df, x="wordCount", y = "totalFalseNegatives")
 
 # COMMAND ----------
 
-audit_df = df.dropna(subset=['themeConfidence', 'themeIdsSystemFalsePositives'])
+fp = df.dropna(subset=['themeConfidence', 'themeIdsSystemFalsePositives'])
 
 # COMMAND ----------
 
-audit_df = audit_df[audit_df["themeConfidence"].apply(lambda x: len(x) > 0)]
+fp = fp[fp["themeConfidence"].apply(lambda x: len(x) > 0)]
 
 # COMMAND ----------
 
@@ -189,15 +189,24 @@ def calculate_false_scores(row):
 
 # COMMAND ----------
 
-audit_df['falseScores'] = audit_df.apply(calculate_false_scores, axis=1)
+fp['falseScores'] = fp.apply(calculate_false_scores, axis=1)
 
+
+# COMMAND ----------
+
+fp.head()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # False Positive and Scores table
 
 # COMMAND ----------
 
 # Create a list to store all "falsePositives" and corresponding "falseScores"
 false_data = []
 
-for _, row in audit_df.iterrows():
+for _, row in fp.iterrows():
     false_positives = row['themeIdsSystemFalsePositives']
     false_scores = row['themeConfidence']
 
@@ -219,7 +228,11 @@ summary_table.columns = ['falsePositives', 'Count', 'Average falseScores']
 
 # COMMAND ----------
 
-summary_table.sort_values(by='Average falseScores', ascending=False)
+summary_table[summary_table["falsePositives"]!="rfi"].sort_values(by='Count', ascending=False)
+
+# COMMAND ----------
+
+summary_table["Count"].sum()
 
 # COMMAND ----------
 
@@ -269,7 +282,7 @@ audit_df.to_csv("amp_audit_viv.csv", index=False)
 
 # COMMAND ----------
 
-audit_df = audit_df[audit_df["themeIdsSystemFalsePositives"].apply(lambda x: len(x) > 0)]
+fp = fp[fp["themeIdsSystemFalsePositives"].apply(lambda x: len(x) > 0)]
 
 # COMMAND ----------
 
@@ -278,22 +291,29 @@ audit_df.head()
 # COMMAND ----------
 
 # get the first element of verified theme, fales positive, and scores so that we can make a corre plot
-audit_df["themeIdsReviewed_1"] = audit_df["themeIdsReviewed"].apply(lambda x: x[0])
+fp["themeIdsReviewed_1"] = fp["themeIdsReviewed"].apply(lambda x: x[0])
+fp["themeIdsReviewed_2"] = fp["themeIdsReviewed"].apply(lambda x: x[1] if len(x)>1 else np.nan)
 
 # COMMAND ----------
 
-audit_df["themeIdsSystemFalsePositives_1"] = audit_df["themeIdsSystemFalsePositives"].apply(lambda x: x[0])
-audit_df["falseScores_1"] = audit_df["falseScores"].apply(lambda x: x[0]).astype(float)
+fp["themeIdsSystemFalsePositives_1"] = fp["themeIdsSystemFalsePositives"].apply(lambda x: x[0])
+fp["themeIdsSystemFalsePositives_2"] = fp["themeIdsSystemFalsePositives"].apply(lambda x: x[1] if len(x)>1 else np.nan)
+
+fp["falseScores_1"] = fp["themeConfidence"].apply(lambda x: x[0]).astype(float)
+fp["falseScores_2"] = fp["themeConfidence"].apply(lambda x: x[1] if len(x)>1 else np.nan).astype(float)
 
 # COMMAND ----------
 
-corr_plot = audit_df[["themeIdsReviewed_1", "themeIdsSystemFalsePositives_1", "falseScores_1"]]
+
 
 # COMMAND ----------
 
-df_heatmap = corr_plot.pivot_table(values='falseScores_1',index='themeIdsReviewed_1',columns='themeIdsSystemFalsePositives_1',aggfunc=np.mean)
-sns.heatmap(df_heatmap,annot=True, cmap = sns.cm.rocket_r)
-plt.show()
+corr_plot = fp[["themeIdsReviewed_1", "themeIdsSystemFalsePositives_1", "falseScores_1"]]
+corr_plot2 = fp[["themeIdsReviewed_1", "themeIdsSystemFalsePositives_2", "falseScores_2"]]
+
+# COMMAND ----------
+
+import numpy as np
 
 # COMMAND ----------
 
@@ -306,7 +326,26 @@ sns.heatmap(counts,  annot = True, fmt = '.0f', cmap = sns.cm.rocket_r)
 
 # COMMAND ----------
 
-corr_plot["falsePositives_1"].value_counts()
+counts2 = corr_plot2.groupby(['themeIdsReviewed_1', 'themeIdsSystemFalsePositives_2']).size().reset_index(name = 'count')
+counts2 = counts2.pivot(index = 'themeIdsReviewed_1', columns = 'themeIdsSystemFalsePositives_2', values = 'count')
+
+# COMMAND ----------
+
+sns.heatmap(counts2,  annot = True, fmt = '.0f', cmap = sns.cm.rocket_r)
+
+# COMMAND ----------
+
+corr_plot3 = fp[["themeIdsReviewed_1", "themeIdsReviewed_2", "falseScores_2"]]
+counts3 = corr_plot3.groupby(['themeIdsReviewed_1', 'themeIdsReviewed_2']).size().reset_index(name = 'count')
+counts3 = counts3.pivot(index = 'themeIdsReviewed_1', columns = 'themeIdsReviewed_2', values = 'count')
+
+# COMMAND ----------
+
+sns.heatmap(counts3,  annot = True, fmt = '.0f', cmap = sns.cm.rocket_r)
+
+# COMMAND ----------
+
+corr_plot3
 
 # COMMAND ----------
 
