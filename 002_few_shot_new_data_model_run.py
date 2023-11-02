@@ -89,6 +89,10 @@ print(f"Removed {(len_before - len(df))/len_before:.2%} duplicates.")
 
 # COMMAND ----------
 
+df["split"].value_counts()
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # Create training sets
 
@@ -189,6 +193,10 @@ ds = DatasetDict({
 
 # COMMAND ----------
 
+ds
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Create training slices to investigate what's the right balance of supervised to unsupervised data needed
 
@@ -246,10 +254,18 @@ def prepare_labels(batch):
 
 ds = ds.map(prepare_labels, batched=True)
 
+
+
+# COMMAND ----------
+
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report
 from skmultilearn.problem_transform import BinaryRelevance
 from sklearn.feature_extraction.text import CountVectorizer
+
+# COMMAND ----------
+
+
 
 for train_slice in train_slices:
     # Get training slice and test data
@@ -468,7 +484,7 @@ def plot_metrics(micro_scores, macro_scores, sample_sizes, current_model):
 
 # COMMAND ----------
 
-plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
+plot_metrics(micro_scores, macro_scores, train_samples, "Embedding")
 
 
 # COMMAND ----------
@@ -485,11 +501,8 @@ plot_metrics(micro_scores, macro_scores, train_samples, "Naive Bayes")
 
 # COMMAND ----------
 
-macro_scores["Embedding"] = macro_scores["Embedding"][6:]
-
-# COMMAND ----------
-
-micro_scores["Embedding"] = micro_scores["Embedding"][6:]
+# macro_scores["Embedding"] = macro_scores["Embedding"][6:]
+# micro_scores["Embedding"] = micro_scores["Embedding"][6:]
 
 # COMMAND ----------
 
@@ -506,7 +519,15 @@ audit = pd.read_pickle("./audit_model_training_data.pkl")
 
 # COMMAND ----------
 
-audit.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+labeled_data.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+
+# COMMAND ----------
+
+labeled_data = df[df["split"]== "labeled"]
+
+# COMMAND ----------
+
+labeled_data.shape
 
 # COMMAND ----------
 
@@ -514,8 +535,8 @@ audit.head()
 
 # COMMAND ----------
 
-y_true = mlb.transform(audit["themeIdsReviewed"])
-y_pred = mlb.transform(audit["themeIds"])
+y_true = mlb.transform(labeled_data["themeIdsReviewed"])
+y_pred = mlb.transform(labeled_data["themeIds"])
 
 # COMMAND ----------
 
