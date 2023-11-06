@@ -64,3 +64,15 @@ def clean_text(df, text):
     df[text] = df[text].map(lambda x: re.sub("\s{3,20}", "", x))
  
     return df
+
+# function to map to parent themes
+def map_themes(themes):
+    if isinstance(themes, list):
+        big_themes = []
+        for theme in themes:
+            for key, values in theme_dict.items():
+                if theme in values:
+                    big_themes.append(key)
+                    break
+        return big_themes if big_themes else None
+    return None
