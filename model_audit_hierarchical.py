@@ -31,39 +31,21 @@ df.shape
 
 # COMMAND ----------
 
-theme_dict= {
+df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+
+# COMMAND ----------
+
+df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
+
+# COMMAND ----------
+
+theme_dict = {
     "conspiracy-corruption": ["bioweapon", "conspiracy", "corruption", "media-bias", "medical-exploitation"],
     "illness-cause": ["stigmatization", "case-reporting", "symptoms-severity", "variants"],
     "intervention-capacity":["capacity"],
     "prevention-treatment-alternative": ["alternative-cures"],
     "prevention-treatment-approved": ["alternative-cures","prevention-collective", "prevention-individual", "treatment", "vaccine-efficacy", "vaccine-side-effects"]
 }
-
-# COMMAND ----------
-
-df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
-
-# COMMAND ----------
-
-def map_themes(themes):
-    if isinstance(themes, list):
-        big_themes = []
-        for theme in themes:
-            for key, values in theme_dict.items():
-                if theme in values:
-                    big_themes.append(key)
-                    break
-        return big_themes if big_themes else None
-    return None
-
-# COMMAND ----------
-
-df['themeIdsReviewedParent'] = df['themeIdsReviewed'].apply(map_themes)
-df['themeIdsParent'] = df['themeIds'].apply(map_themes)
-
-# COMMAND ----------
-
-df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
 
 # COMMAND ----------
 

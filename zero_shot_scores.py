@@ -17,19 +17,10 @@ pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
 
-mlflow_client = MlflowClient()
-exp_name ="/Repos/vpeng@rockfound.org/who/zero_shot_scores"
-exp = mlflow_client.get_experiment_by_name(exp_name)
-mlflow.set_experiment(exp_name)
-run_name = "zero_shot_run"
-parent_run = mlflow.start_run(run_name = run_name)
-
-# COMMAND ----------
-
 def run_zs_experiment(taxonomy_type):
      # set up experiment
     mlflow_client = MlflowClient()
-    exp_name ="/Repos/vpeng@rockfound.org/who/zero_shot_scores"
+    exp_name ="/Users/vpeng@rockfound.org/zero_shot_scores"
     exp = mlflow_client.get_experiment_by_name(exp_name)
     mlflow.set_experiment(exp_name)
     run_name = "zero_shot_run"
@@ -60,14 +51,15 @@ def run_zs_experiment(taxonomy_type):
     micro_score = f1_score(y_true, y_pred, average='micro')
 
     # run experiment
-    with mlflow.start_run():
-        mlflow.log_param("taxonomy_type", taxonomy_type)
-        mlflow.log_metric({"macro_f1": macro_score})
-        mlflow.log_metric({"micro_f1": micro_score})
-    
+    mlflow.log_param("taxonomy_type", taxonomy_type)
+    mlflow.log_metrics({"macro_f1": macro_score, "micro_f1": micro_score})    
     # end run
     mlflow.end_run()
 
+
+# COMMAND ----------
+
+mlflow.end_run()
 
 # COMMAND ----------
 
