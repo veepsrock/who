@@ -1,4 +1,11 @@
 # Databricks notebook source
+import mlflow
+from mlflow.entities.run import Run
+from mlflow.tracking.client import MlflowClient, ModelVersion
+from mlflow.utils import mlflow_tags
+
+# COMMAND ----------
+
 import pandas as pd
 import re
 import json
@@ -297,6 +304,33 @@ pickle.dump(ds, ds_file)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC # Testing ML Flows
+
+# COMMAND ----------
+
+mlflow_client = MlflowClient()
+exp = mlflow_client.get_experiment_by_name("/Repos/vpeng@rockfound.org/who/002_few_shot_new_data_model_run")
+mlflow.set_experiment("/Repos/vpeng@rockfound.org/who/002_few_shot_new_data_model_run")
+run_name = "test_run"
+parent_run = mlflow.start_run(run_name=run_name)
+
+# COMMAND ----------
+
+mlflow.log_params({"test": "asdfd"})
+
+# COMMAND ----------
+
+mlflow.log_metrics({"macro_f1": 0.5, "micro_f1": 0.4}, step= 50)
+mlflow.log_metrics({"macro_f1": 0.8, "micro_f1": 0.7}, step= 100)
+mlflow.log_metrics({"macro_f1": 0.9, "micro_f1": 0.8}, step= 200)
+
+# COMMAND ----------
+
+mlflow.end_run()
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC # Use embeddings as a lookup table
 
 # COMMAND ----------
@@ -519,11 +553,11 @@ audit = pd.read_pickle("./audit_model_training_data.pkl")
 
 # COMMAND ----------
 
-labeled_data.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+labeled_data = df[df["split"]== "labeled"]
 
 # COMMAND ----------
 
-labeled_data = df[df["split"]== "labeled"]
+labeled_data.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
 
 # COMMAND ----------
 

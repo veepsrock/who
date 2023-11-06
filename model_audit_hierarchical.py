@@ -19,9 +19,15 @@ pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
 
-df = pd.read_pickle("./audit_model_training_data.pkl")
-df["themeIds"] = df['themeIds'].apply(lambda themes: [theme for theme in themes if theme != 'rfi'] if isinstance(themes, list) else themes)
-df["themeIds"]=df["themeIds"].apply(lambda x: x[:2] if isinstance(x, list) else x)
+df = pd.read_pickle("./model_training_data.pkl")
+
+# COMMAND ----------
+
+df = df[df["split"]== "labeled"]
+
+# COMMAND ----------
+
+df.shape
 
 # COMMAND ----------
 
@@ -113,6 +119,14 @@ all_labels_child = list(theme_dict_child.keys())
 
 mlb_child = MultiLabelBinarizer()
 mlb_child.fit([all_labels_child])
+
+# COMMAND ----------
+
+df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
