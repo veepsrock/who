@@ -13,6 +13,7 @@ import mlflow
 from mlflow.entities.run import Run
 from mlflow.tracking.client import MlflowClient, ModelVersion
 from mlflow.utils import mlflow_tags
+import warnings
 pd.set_option("display.max_columns" , 50)
 
 # COMMAND ----------
@@ -84,4 +85,77 @@ run_zs_experiment(2)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC # Threshold Experiment
+
+# COMMAND ----------
+
+def filter_threshold(df, threshold):
+    for index, row in df.iterrows():
+        confidences = row["themeConfidence"]
+        theme_ids = row["themeIds"]
+
+        # Ensure lengths are the same
+        min_len = min(len(confidences), len(theme_ids))
+        filtered_confidences = [confidences[i] if confidences[i] > threshold else None for i in range(min_len)]
+        filtered_theme_ids = [theme_ids[i] if confidences[i] > threshold else None for i in range(min_len)]
+        df.at[index, "themeConfidence"] = filtered_confidences
+        df.at[index, "themeIds"] = filtered_theme_ids
+
+    return df
+
+# COMMAND ----------
+
+for prob_threshold in [i/100 for i in range(80, 96, 5)]:
+    print(prob_threshold)
+
+# COMMAND ----------
+
+def run_zs_threshold():
+    with open("theme_dict.json", 'r') as f:
+        theme_dict = json.load(f)
+    # create labels list
+    all_labels = list(theme_dict.keys())
+
+    # set up experiment
+    mlflow_client = MlflowClient()
+    exp_name ="/Users/vpeng@rockfound.org/zero_shot_threshold"
+    exp = mlflow_client.get_experiment_by_name(exp_name)
+    mlflow.set_experiment(exp_name)
+    run_name = "zero_shot_threshold"
+    parent_run = mlflow.start_run(run_name = run_name)
+
+    
+    for prob_threshold in [i/100 for i in range(80, 96, 5)]:
+        # read in data
+        df = pd.read_pickle("./model_training_data.pkl")
+        df = df[df["split"]== "labeled"]
+        df.dropna(subset=["themeIds", "themeIdsReviewed", "themeConfidence"], inplace = True)
+        df = filter_threshold(df, prob_threshold)
+
+        # transform data
+        mlb = MultiLabelBinarizer()
+        mlb.fit([all_labels])
+            
+        y_true = mlb.transform(df["themeIdsReviewed"])
+        y_pred = mlb.transform(df["themeIds"])
+
+        # get scores
+        macro_score = f1_score(y_true, y_pred, average='macro')
+        micro_score = f1_score(y_true, y_pred, average='micro')
+        precision = precision_score(y_true, y_pred, average='weighted', zero_division=1)
+        recall = recall_score(y_true, y_pred, average='weighted', zero_division=1)
+
+        # run experiment
+        mlflow.log_metrics({"macro_f1": macro_score, "micro_f1": micro_score, "precision": precision, "recall": recall, "threshold": prob_threshold}, step= int(prob_threshold*100))    
+        
+    # end run
+    mlflow.end_run()
+
+# COMMAND ----------
+
 mlflow.end_run()
+
+# COMMAND ----------
+
+run_zs_threshold()
