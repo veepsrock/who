@@ -12,7 +12,8 @@ pd.set_option('display.max_columns', None)
 
 # COMMAND ----------
 
-df = pd.read_pickle("audit_model_training_data.pkl")
+df = pd.read_pickle("./model_training_data.pkl")
+df = df[df["split"]== "labeled"]
 
 # COMMAND ----------
 
@@ -44,7 +45,11 @@ cr[["textTranslated.en", "themeIdsReviewed", "themeIdsSystemFalseNegatives", "th
 
 # COMMAND ----------
 
-trues = df["themeIdsReviewed"].explode().value_counts().to_frame().reset_index()
+df.head()
+
+# COMMAND ----------
+
+trues = df["themeIdsParent"].explode().value_counts().to_frame().reset_index()
 negatives = df["themeIdsSystemFalseNegatives"].explode().value_counts().to_frame().reset_index()
 positives = df["themeIdsSystemFalsePositives"].explode().value_counts().to_frame().reset_index()
 
@@ -105,7 +110,7 @@ def custom_len(x):
 # calculate the total number of false positives per post
 df["totalFalsePositives"] = df["themeIdsSystemFalsePositives"].apply(custom_len)
 df["totalFalseNegatives"] = df["themeIdsSystemFalseNegatives"].apply(custom_len)
-df["totalTrues"] = df['themeIdsReviewed'].apply(custom_len)
+df["totalTrues"] = df['themeIdsParent'].apply(custom_len)
 
 # COMMAND ----------
 

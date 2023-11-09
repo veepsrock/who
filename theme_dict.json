@@ -1,0 +1,19 @@
+{
+    "bioweapon":["bioligical weapon", "chemical agent"],
+    "conspiracy": ["conspiracy", "nefarious plots"],
+    "corruption": ["corruption", "economic exploitation", "profiteering","extortion"],
+    "media-bias": ["media slant and bias", "fake news"],
+    "medical-exploitation": ["medical exploitation", "experimental treatments", "expired medicine", "guinea pigs"],
+    "variants": ["disease variants", "disease genetic modifications"],
+    "alternative-cures": ["alternative cures", "herbal remedies", "home remedies", "healers and healing"],
+    "prevention-collective":["collective prevention", "lockdowns", "travel bans", "travel restrictions"],
+    "prevention-individual":["individual prevention", "non-pharmaceutical interventions", "quarantine", "face masks", "hand washing"],
+    "capacity":["capacity of public health system (hospitals, doctors, governments, aid)"],
+    "religious-practices":["religious belief", "religious leaders", "cultural practices"],
+    "treatment":["pharmaceutical treatment", "clinical treatment", "pills"],
+    "vaccine-efficacy":["vaccine efficacy", "vaccines"],
+    "case-reporting":[],
+    "stigmatization":[],
+    "symptoms-severity": [], 
+    "vaccine-side-effects":[]
+}
