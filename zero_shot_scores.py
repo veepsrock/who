@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import pickle
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_score
 from collections import defaultdict
 import mlflow
 from mlflow.entities.run import Run
@@ -27,6 +27,8 @@ def mlb_transform(label_list, true_col, pred_col, num_labels):
 
     mlb = MultiLabelBinarizer()
     mlb.fit([label_list])
+    
+
     if num_labels ==2:
         pred_col=pred_col+str(num_labels)
         
@@ -38,8 +40,10 @@ def mlb_transform(label_list, true_col, pred_col, num_labels):
     micro_score = f1_score(y_true, y_pred, average='micro')
     precision = precision_score(y_true, y_pred, average='weighted')
     recall = recall_score(y_true, y_pred, average='weighted')
+    class_names = mlb.classes_
+    jaccard_scores = jaccard_score(y_true,y_pred, average =None)
 
-    return macro_score, micro_score, precision, recall
+    return macro_score, micro_score, precision, recall, class_names, jaccard_scores
 
 # COMMAND ----------
 
@@ -60,7 +64,9 @@ def run_zs_experiment(num_labels):
             # create labels list
             all_labels_parent = list(theme_dict.keys())
             # get scores
-            macro_score_parent, micro_score_parent, precision_parent, recall_parent = mlb_transform(all_labels_parent, "themeIdsReviewedParent", "themeIdsParent", 2)
+            macro_score_parent, micro_score_parent, precision_parent, recall_parent, class_names, jaccard_scores = mlb_transform(all_labels_parent, "themeIdsReviewedParent", "themeIdsParent", 2)
+            class_names = ["p-" + class_name for class_name in class_names]
+            jaccard_dict_p = dict(zip(class_names, jaccard_scores))
 
         else:
             with open("theme_dict.json", 'r') as f:
@@ -69,11 +75,16 @@ def run_zs_experiment(num_labels):
             all_labels = list(theme_dict.keys())
 
             # get scores
-            macro_score, micro_score, precision, recall = mlb_transform(all_labels, "themeIdsReviewed", "themeIds", 2)
+            macro_score, micro_score, precision, recall, class_names, jaccard_scores = mlb_transform(all_labels, "themeIdsReviewed", "themeIds", 2)
+            class_names = ["c-" + class_name for class_name in class_names]
+            jaccard_dict = dict(zip(class_names, jaccard_scores))
+            jaccard_dict_p.update(jaccard_dict)
 
     # run experiment
+    metrics = {"macro_f1_p": macro_score_parent, "micro_f1_p": micro_score_parent, "macro_f1_c": macro_score, "micro_f1_c": micro_score, "precision_p": precision_parent, "recall_p": recall_parent, "precision_c": precision, "recall_c": recall}
+    metrics.update(jaccard_dict_p)
     mlflow.log_params({"taxonomy_type": taxonomy_type, "number_of_labels": num_labels})
-    mlflow.log_metrics({"macro_f1_parent": macro_score_parent, "micro_f1_parent": micro_score_parent, "macro_f1_child": macro_score, "micro_f1_child": micro_score, "precision_parent": precision_parent, "recall_parent": recall_parent, "precision_child": precision, "recall_child": recall})    
+    mlflow.log_metrics(metrics)    
     
     # end run
     mlflow.end_run()

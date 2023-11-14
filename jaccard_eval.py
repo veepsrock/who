@@ -127,6 +127,10 @@ jaccard_scores = jaccard_score(y_true,y_pred, average =None)
 
 # COMMAND ----------
 
+jaccard_scores
+
+# COMMAND ----------
+
 from sklearn.metrics import multilabel_confusion_matrix
 # Create confusion matrix
 confusion_matrix = multilabel_confusion_matrix(y_true,y_pred)
@@ -141,6 +145,38 @@ plt.ylabel('True Labels')
 plt.title('Confusion Matrix for Label Bioweapon')
 plt.show()
 
+
+# COMMAND ----------
+
+class_names = mlb.classes_
+
+# COMMAND ----------
+
+class_names
+
+# COMMAND ----------
+
+scores = dict(zip(class_names, jaccard_scores))
+
+# COMMAND ----------
+
+new_scores = {"recall": 2}
+
+# COMMAND ----------
+
+scores.update(new_scores)
+
+# COMMAND ----------
+
+scores.update({"macro_f1": 1}, {"macro_f2": 3})
+
+# COMMAND ----------
+
+scores
+
+# COMMAND ----------
+
+["c-" + class_name for class_name in class_names]
 
 # COMMAND ----------
 
