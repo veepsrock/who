@@ -40,6 +40,10 @@ df["text"] = df["text"].fillna(df["textTranslated.en"])
 
 # COMMAND ----------
 
+df.head()
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # Try taking the first two labels from model predictions and dropping rfi
 
