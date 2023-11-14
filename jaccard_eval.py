@@ -249,6 +249,10 @@ df.head()
 
 # COMMAND ----------
 
+df.dtypes
+
+# COMMAND ----------
+
 y_true_embs = mlb.transform(list(df["themeIdsReviewed"]))
 y_pred_embs = mlb.transform(list(df["embeddingPredictions"]))
 
