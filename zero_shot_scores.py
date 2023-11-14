@@ -90,20 +90,7 @@ run_zs_experiment(2)
 
 # COMMAND ----------
 
-# function to map to parent themes
-def map_themes(themes):
-    with open("theme_dict.json", 'r') as f:
-        theme_dict = json.load(f)
-    if isinstance(themes, list):
-        big_themes = []
-        for theme in themes:
-            for key, values in theme_dict.items():
-                if theme in values:
-                    big_themes.append(key)
-                    break
-        return big_themes if big_themes else None
-    return None
-
+# get theme threshold
 def filter_threshold(df, threshold):
     for index, row in df.iterrows():
         confidences = row["themeConfidence"]
@@ -120,26 +107,7 @@ def filter_threshold(df, threshold):
 
 # COMMAND ----------
 
-df = pd.read_pickle("./model_training_data.pkl")
-df = df[df["split"]== "labeled"]
-df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
-df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
-
-# COMMAND ----------
-
-test_df = filter_threshold(df, 0.8)
-
-# COMMAND ----------
-
-df.columns
-
-# COMMAND ----------
-
-test_df["themeIdsParentThreshold"]= test_df['themeIds'].apply(map_themes)
-
-# COMMAND ----------
-
-def run_zs_threshold(taxonomy_type):
+def run_zs_threshold():
     with open("theme_dict.json", 'r') as f:
         theme_dict = json.load(f)
     # create labels list
@@ -161,21 +129,12 @@ def run_zs_threshold(taxonomy_type):
         df.dropna(subset=["themeIds", "themeIdsReviewed", "themeConfidence"], inplace = True)
         df = filter_threshold(df, prob_threshold)
 
-        if taxonomy_type == "zero_shot_parent":
-            df["themeIdsParentThreshold"] = df["themeIds"].apply(map_themes)
-            df.dropna(subset=["themeIdsParentThreshold", "themeIdsReviewedParent"], inplace = True)
-            true_col = "themeIdsReviewedParent"
-            pred_col = "themeIdsParentThreshold"
-        else:
-            true_col= "themeIdsReviewed"
-            pred_col = "themeIds"
-
         # transform data
         mlb = MultiLabelBinarizer()
         mlb.fit([all_labels])
             
-        y_true = mlb.transform(df[true_col])
-        y_pred = mlb.transform(df[pred_col])
+        y_true = mlb.transform(df["themeIdsReviewed"])
+        y_pred = mlb.transform(df["themeIds"])
 
         # get scores
         macro_score = f1_score(y_true, y_pred, average='macro')
@@ -184,7 +143,7 @@ def run_zs_threshold(taxonomy_type):
         recall = recall_score(y_true, y_pred, average='weighted', zero_division=1)
 
         # run experiment
-        mlflow.log_params({"taxonomy_type": taxonomy_type})
+        #mlflow.log_params({"taxonomy_type": taxonomy_type})
         mlflow.log_metrics({"macro_f1": macro_score, "micro_f1": micro_score, "precision": precision, "recall": recall}, step= int(prob_threshold*100))    
         
     # end run
@@ -196,12 +155,4 @@ mlflow.end_run()
 
 # COMMAND ----------
 
-"zero_shot_parent", "zero_shot_child"
-
-# COMMAND ----------
-
-run_zs_threshold("zero_shot_parent")
-
-# COMMAND ----------
-
-
+run_zs_threshold()
