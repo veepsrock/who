@@ -47,6 +47,13 @@ def mlb_transform(label_list, true_col, pred_col, num_labels):
 
 # COMMAND ----------
 
+df = pd.read_pickle("./model_training_data.pkl")
+df = df[df["split"]== "labeled"]
+df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
+df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
+
+# COMMAND ----------
+
 def run_zs_experiment(num_labels):
     # set up experiment
     mlflow_client = MlflowClient()
@@ -67,6 +74,8 @@ def run_zs_experiment(num_labels):
             macro_score_parent, micro_score_parent, precision_parent, recall_parent, class_names, jaccard_scores = mlb_transform(all_labels_parent, "themeIdsReviewedParent", "themeIdsParent", 2)
             class_names = ["p-" + class_name for class_name in class_names]
             jaccard_dict_p = dict(zip(class_names, jaccard_scores))
+            true_values = df["themeIdsReviewedParent"].explode().value_counts(normalize = True).to_dict()
+            true_dict_p = {'p-' + key + "-true": value for key, value in true_values.items()}
 
         else:
             with open("theme_dict.json", 'r') as f:
@@ -79,10 +88,12 @@ def run_zs_experiment(num_labels):
             class_names = ["c-" + class_name for class_name in class_names]
             jaccard_dict = dict(zip(class_names, jaccard_scores))
             jaccard_dict_p.update(jaccard_dict)
+            true_values = df["themeIdsReviewed"].explode().value_counts(normalize = True).to_dict()
+            true_dict_c = {'c-' + key + "-true": value for key, value in true_values.items()}
 
     # run experiment
     metrics = {"p-macro_f1": macro_score_parent, "p-micro_f1": micro_score_parent, "c-macro_f1": macro_score, "c-micro_f1": micro_score, "p-precision": precision_parent, "p-recall": recall_parent, "c-precision": precision, "c-recall": recall}
-    metrics.update(jaccard_dict_p)
+    metrics.update(jaccard_dict_p, **true_dict_p, **true_dict_c)
     mlflow.log_params({"taxonomy_type": taxonomy_type, "number_of_labels": num_labels})
     mlflow.log_metrics(metrics)    
     
