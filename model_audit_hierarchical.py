@@ -31,6 +31,19 @@ df.shape
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC # Check for undefined themes
+
+# COMMAND ----------
+
+df[df["themeIdsReviewedParent"].isna()]
+
+# COMMAND ----------
+
+df[df['themeIdsReviewedParent'].apply(len) == 0]
+
+# COMMAND ----------
+
 df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
 
 # COMMAND ----------
