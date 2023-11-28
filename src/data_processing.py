@@ -66,12 +66,21 @@ def clean_text(df, text):
     return df
 
 # get theme dictionary
+#theme_dict = {
+#    "conspiracy-corruption": ["bioweapon", "conspiracy", "corruption", "media-bias", "medical-exploitation"],
+#    "illness-cause": ["stigmatization", "case-reporting", "symptoms-severity", "variants"],
+#    "intervention-capacity":["capacity"],
+#    "prevention-treatment-alternative": ["alternative-cures", "religious-practices"],
+#    "prevention-treatment-approved": ["prevention-collective", "prevention-individual", "treatment", "vaccine-efficacy", "vaccine-side-effects"]
+#}
+# get theme dictionary
 theme_dict = {
     "conspiracy-corruption": ["bioweapon", "conspiracy", "corruption", "media-bias", "medical-exploitation"],
     "illness-cause": ["stigmatization", "case-reporting", "symptoms-severity", "variants"],
     "intervention-capacity":["capacity"],
     "prevention-treatment-alternative": ["alternative-cures", "religious-practices"],
-    "prevention-treatment-approved": ["prevention-collective", "prevention-individual", "treatment", "vaccine-efficacy", "vaccine-side-effects"]
+    "prevention-treatment-approved": ["prevention-collective", "prevention-individual", "treatment"],
+    "vaccines": ["vaccine-efficacy", "vaccine-side-effects"]
 }
 
 # function to map to parent themes

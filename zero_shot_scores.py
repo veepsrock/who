@@ -20,7 +20,7 @@ pd.set_option("display.max_columns" , 50)
 
 def mlb_transform(label_list, true_col, pred_col, num_labels):
     # read in data
-    df = pd.read_pickle("./model_training_data.pkl")
+    df = pd.read_pickle("./model_training_data_vax.pkl")
     df = df[df["split"]== "labeled"]
     df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
     df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
@@ -47,14 +47,14 @@ def mlb_transform(label_list, true_col, pred_col, num_labels):
 
 # COMMAND ----------
 
-df = pd.read_pickle("./model_training_data.pkl")
+df = pd.read_pickle("./model_training_data_vax.pkl")
 df = df[df["split"]== "labeled"]
 df.dropna(subset=["themeIds", "themeIdsReviewed"], inplace = True)
 df.dropna(subset=["themeIdsParent", "themeIdsReviewedParent"], inplace = True)
 
 # COMMAND ----------
 
-def run_zs_experiment(num_labels):
+def run_zs_experiment(exp_type, num_labels):
     # set up experiment
     mlflow_client = MlflowClient()
     exp_name ="/Users/vpeng@rockfound.org/zero_shot_scores"
@@ -66,7 +66,7 @@ def run_zs_experiment(num_labels):
     # get themes
     for taxonomy_type in ["zero_shot_parent", "zero_shot_child"]:
         if taxonomy_type == "zero_shot_parent":
-            with open("theme_dict_parent.json", 'r') as f:
+            with open("theme_dict_parent_vax.json", 'r') as f:
                 theme_dict = json.load(f)
             # create labels list
             all_labels_parent = list(theme_dict.keys())
@@ -94,7 +94,7 @@ def run_zs_experiment(num_labels):
     # run experiment
     metrics = {"p-macro_f1": macro_score_parent, "p-micro_f1": micro_score_parent, "c-macro_f1": macro_score, "c-micro_f1": micro_score, "p-precision": precision_parent, "p-recall": recall_parent, "c-precision": precision, "c-recall": recall}
     metrics.update(jaccard_dict_p, **true_dict_p, **true_dict_c)
-    mlflow.log_params({"taxonomy_type": taxonomy_type, "number_of_labels": num_labels})
+    mlflow.log_params({"taxonomy_type": taxonomy_type, "number_of_labels": num_labels, "exp_type": exp_type})
     mlflow.log_metrics(metrics)    
     
     # end run
@@ -103,7 +103,7 @@ def run_zs_experiment(num_labels):
 
 # COMMAND ----------
 
-run_zs_experiment("all")
+run_zs_experiment("simplified_vax", 2)
 
 # COMMAND ----------
 
