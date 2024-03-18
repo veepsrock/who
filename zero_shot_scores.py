@@ -129,9 +129,24 @@ def filter_threshold(df, threshold):
 
 # COMMAND ----------
 
-def run_zs_threshold():
-    with open("theme_dict.json", 'r') as f:
-        theme_dict = json.load(f)
+# map to parent themes
+def map_themes(themes, theme_dict):
+    if isinstance(themes, list):
+        big_themes = []
+        for theme in themes:
+            if theme is not None:
+                for key, values in theme_dict.items():
+                    if theme in values:
+                        big_themes.append(key)
+                        break
+        return big_themes if big_themes else None
+    return None
+
+# COMMAND ----------
+
+def run_zs_threshold(theme_dict):
+    #with open("theme_dict.json", 'r') as f:
+    #    theme_dict = json.load(f)
     # create labels list
     all_labels = list(theme_dict.keys())
 
@@ -150,13 +165,17 @@ def run_zs_threshold():
         df = df[df["split"]== "labeled"]
         df.dropna(subset=["themeIds", "themeIdsReviewed", "themeConfidence"], inplace = True)
         df = filter_threshold(df, prob_threshold)
+        # map parent themes based on dictionary
+        df["themeIdsReviewedParent"] = df["themeIdsReviewed"].apply(lambda x: map_themes(x, theme_dict))
+        df["themeIdsParent"] = df["themeIds"].apply(lambda x: map_themes(x, theme_dict))
+        df.dropna(subset=["themeIdsParent"], inplace = True)
 
         # transform data
         mlb = MultiLabelBinarizer()
         mlb.fit([all_labels])
             
-        y_true = mlb.transform(df["themeIdsReviewed"])
-        y_pred = mlb.transform(df["themeIds"])
+        y_true = mlb.transform(df["themeIdsReviewedParent"])
+        y_pred = mlb.transform(df["themeIdsParent"])
 
         # get scores
         macro_score = f1_score(y_true, y_pred, average='macro')
@@ -173,11 +192,73 @@ def run_zs_threshold():
 
 # COMMAND ----------
 
+df = pd.read_pickle("./model_training_data.pkl")
+df = df[df["split"]== "labeled"]
+df.dropna(subset=["themeIds", "themeIdsReviewed", "themeConfidence"], inplace = True)
+df = filter_threshold(df, 0.79)
+
+# COMMAND ----------
+
+# map parent themes based on dictionary
+df["themeIdsReviewedParent"] = df["themeIdsReviewed"].apply(lambda x: map_themes(x, theme_dict))
+df["themeIdsParent"] = df["themeIds"].apply(lambda x: map_themes(x, theme_dict))
+
+# COMMAND ----------
+
+df["themeIds"].isna().sum()
+
+# COMMAND ----------
+
+df["themeIdsParent"].isna().sum()
+
+# COMMAND ----------
+
+df.dropna(subset=["themeIdsParent"], inplace = True)
+
+# COMMAND ----------
+
+all_labels = list(theme_dict.keys())
+
+# COMMAND ----------
+
+mlb = MultiLabelBinarizer()
+mlb.fit([all_labels])
+
+# COMMAND ----------
+
+y_true = mlb.transform(df["themeIdsReviewedParent"])
+y_pred = mlb.transform(df["themeIdsParent"])
+
+# COMMAND ----------
+
+f1_score(y_true, y_pred, average='macro')
+
+# COMMAND ----------
+
+f1_score(y_true, y_pred, average='micro')
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
 mlflow.end_run()
 
 # COMMAND ----------
 
-run_zs_threshold()
+theme_dict = {
+    "conspiracy and corruption": ["bioweapon", "conspiracy", "corruption", "media-bias", "medical-exploitation"],
+    "illness and stigma": ["stigmatization", "case-reporting", "symptoms-severity", "variants"],
+    "intervention and capacity":["capacity"],
+    "alternative treatment and prevention": ["alternative-cures", "religious-practices"],
+    "treatment and medicine": ["prevention-collective", "prevention-individual", "treatment"],
+    "vaccines": ["vaccine-efficacy", "vaccine-side-effects"]
+}
+
+# COMMAND ----------
+
+run_zs_threshold(theme_dict)
 
 # COMMAND ----------
 
