@@ -1,9 +1,13 @@
 # MLFlow Experiments
+The original taxonomy we had in production had 18 child labels, which aggregated up to 5 parent themes. Please refer to [this report for reference](https://datarockfound.atlassian.net/wiki/spaces/~115018218/pages/1705443335/WHO+Theme+Classification+Report) and a high level overview of performance and decisions made.
 
 ## Taxonomy Experiment
-The objective of this experiment was to test the performance of different taxonomy types. The original taxonomy we had in production had 18 child labels, which aggregated up to 5 parent themes. Please refer to [this report for reference.](https://datarockfound.atlassian.net/wiki/spaces/~115018218/pages/1705443335/WHO+Theme+Classification+Report) In this experiment, we tested different versions of a simplified taxonomy to see how it compares to predicting at the child level vs. the parent level. The only experiment variable is the taxonomy type.
+The objective of this experiment was to test the performance of different taxonomy types. We tested different versions of a simplified taxonomy to see how it compares to predicting at the child level vs. the parent level. The only experiment variable is the taxonomy type. 
 
-#### Here are the parameters
+### Results
+Through this experimentation, we discovered that the original production taxonomy outperformed predicting the themes at the parent level. We did make changes to breakout vaccines as its own category.
+
+Here are the parameters. The results of each run can be found [here](taxonomy_experiment_runs.csv)
 - simplified: simplified taxonomy
 ```
 theme_dict=
@@ -97,3 +101,13 @@ theme_dict_nlp = {
     "prevention-treatment-approved": "Discussion of medical treatment for diseases including medicine and procedures proscribed by a medical professional. Discussion of vaccines including vaccine safet, side effects, and efficacy"
 }
 ```
+## Zero Shot Threshold Experiment
+The objective of this experiment was to test the performance of different thresholds for confidence levels. The original taxonomy we had a 0.8 confidence threshold. The two experiment variables are the taxonomy type (parent or child), and threshold (0.8 and above)
+
+### Results
+Through this experimentation, we discovered that while precision may increase with a higher threshold, recall declines affecting the overall F1 scores. We decided to keep the threshold at the original 0.8 level.
+
+Here are the parameters. The results of each run can be found [here](zero_shot_threshold.csv)
+- zero_shot_parent: model predicting at the parent level themes
+- zero_shot_child: model predicting at the child level themes
+- threshold: 0.8 and above
