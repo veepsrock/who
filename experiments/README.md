@@ -119,7 +119,13 @@ The objective of this experiment was to test the performance of the number of la
 ### Results
 Through this experimentation, we discovered that the model performed best with taking the top two labels.
 
-Here are the parameters. The results of each run can be found [here](zero_shot_threshold.csv)
+Here are the parameters. The results of each run can be found [here](zero_shot_scores.csv)
 - zero_shot_parent: model predicting at the parent level themes
 - zero_shot_child: model predicting at the child level themes
 - number_of_levels: all or 2
+
+## Embedding Experiment
+The objective of this experiment was to track the performance of our embedding model.
+
+### Results
+Overall, we did not have enough labels yet to outperform the zero-shot model. This is something we can continue to track once we have more audited data to improve the embedding. The results of each run can be found [here](embedding.csv)
