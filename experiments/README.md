@@ -111,3 +111,15 @@ Here are the parameters. The results of each run can be found [here](zero_shot_t
 - zero_shot_parent: model predicting at the parent level themes
 - zero_shot_child: model predicting at the child level themes
 - threshold: 0.8 and above
+
+
+## Zero Shot Scores Experiment
+The objective of this experiment was to test the performance of the number of labels used to predict. The original taxonomy we had a 0.8 confidence threshold, and generated the parent themes using all the labels. The two experiment variables are the taxonomy type (parent or child), and number of labels (all or an entered number)
+
+### Results
+Through this experimentation, we discovered that the model performed best with taking the top two labels.
+
+Here are the parameters. The results of each run can be found [here](zero_shot_threshold.csv)
+- zero_shot_parent: model predicting at the parent level themes
+- zero_shot_child: model predicting at the child level themes
+- number_of_levels: all or 2
